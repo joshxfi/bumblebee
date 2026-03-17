@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
 
 import { ChatComposerStatus } from "@/components/chat/chat-composer-status"
@@ -67,16 +67,14 @@ export function App() {
     .filter(Boolean)
     .join(" · ")
 
-  const progressMeta = useMemo(() => {
-    if (!loadProgress) {
-      return null
-    }
+  const progressMeta = !loadProgress
+    ? null
+    : (() => {
+        const loaded = formatBytes(loadProgress.loaded)
+        const total = formatBytes(loadProgress.total)
 
-    const loaded = formatBytes(loadProgress.loaded)
-    const total = formatBytes(loadProgress.total)
-
-    return loaded && total ? `${loaded} / ${total}` : null
-  }, [loadProgress])
+        return loaded && total ? `${loaded} / ${total}` : null
+      })()
 
   const scrollButtonOffsetClassName = showComposerStatus
     ? "bottom-[calc(11rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9.5rem+env(safe-area-inset-bottom))]"
