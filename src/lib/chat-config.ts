@@ -130,3 +130,12 @@ export function formatBytes(value?: number) {
 
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`
 }
+
+export function formatPercent(value?: number | null) {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return null
+  }
+
+  const normalized = Math.max(0, Math.min(100, value))
+  return `${Math.round(normalized)}%`
+}

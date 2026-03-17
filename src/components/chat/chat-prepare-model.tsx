@@ -6,6 +6,7 @@ import {
   ProgressLabel,
   ProgressValue,
 } from "@/components/ui/progress"
+import { formatPercent } from "@/lib/chat-config"
 import type { RuntimeStatus } from "@/lib/chat-types"
 
 type ChatPrepareModelProps = {
@@ -31,6 +32,8 @@ export function ChatPrepareModel({
   progressMeta,
   runtimeStatus,
 }: ChatPrepareModelProps) {
+  const formattedProgress = formatPercent(progress)
+
   if (error) {
     return (
       <div className="border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm">
@@ -64,14 +67,14 @@ export function ChatPrepareModel({
             <p className="mt-1 text-muted-foreground">{detail}</p>
           </div>
           <div className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-primary">
-            {progress === null ? "Syncing" : `${progress}%`}
+            {formattedProgress ?? "Syncing"}
           </div>
         </div>
         <div className="mt-3">
           <Progress value={progress ?? 8}>
             <ProgressLabel>{modelLabel} warmup</ProgressLabel>
             <ProgressValue>
-              {() => (progress === null ? "Preparing" : `${progress}%`)}
+              {() => formattedProgress ?? "Preparing"}
             </ProgressValue>
           </Progress>
         </div>
