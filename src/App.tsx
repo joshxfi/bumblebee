@@ -1,7 +1,16 @@
-import { useEffect, useMemo, useRef, type ComponentProps } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react"
 import {
   ArrowClockwise,
+  ArrowDown,
   ArrowUpRight,
+  Check,
+  CopySimple,
   Cpu,
   Lightning,
   PaperPlaneTilt,
@@ -54,6 +63,28 @@ const statusTone: Record<
   ready: { label: "Ready", variant: "default" },
   generating: { label: "Typing", variant: "secondary" },
   error: { label: "Error", variant: "destructive" },
+}
+
+async function copyToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "absolute"
+  textarea.style.left = "-9999px"
+  document.body.appendChild(textarea)
+  textarea.select()
+
+  const copied = document.execCommand("copy")
+  document.body.removeChild(textarea)
+
+  if (!copied) {
+    throw new Error("Copy failed.")
+  }
 }
 
 function HeaderAction({
@@ -130,11 +161,20 @@ function EmptyState({
   )
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  copyState,
+  message,
+  onCopy,
+}: {
+  copyState: "copied" | "error" | null
+  message: ChatMessage
+  onCopy: (message: ChatMessage) => void
+}) {
   const assistant = message.role === "assistant"
   const fallbackContent =
     message.content ||
     (message.state === "error" ? "Response failed before any text arrived." : "")
+  const canCopy = assistant && message.content.trim().length > 0
 
   return (
     <article
@@ -162,8 +202,36 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <span className="mt-2 inline-flex size-2 animate-pulse bg-current align-middle opacity-80" />
         ) : null}
       </div>
-      <div className="px-1 text-[11px] text-muted-foreground">
-        {assistant ? "Bumblebee" : "You"} · {formatTimestamp(message.createdAt)}
+      <div
+        className={`flex w-full items-center gap-2 px-1 text-[11px] text-muted-foreground ${
+          assistant ? "justify-between" : "justify-end"
+        }`}
+      >
+        <span>
+          {assistant ? "Bumblebee" : "You"} · {formatTimestamp(message.createdAt)}
+        </span>
+        {canCopy ? (
+          <div className="flex items-center gap-2">
+            {copyState ? (
+              <span
+                className={
+                  copyState === "error" ? "text-destructive" : "text-primary"
+                }
+              >
+                {copyState === "copied" ? "Copied" : "Copy failed"}
+              </span>
+            ) : null}
+            <Button
+              aria-label="Copy response"
+              className="px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              size="xs"
+              variant="ghost"
+              onClick={() => onCopy(message)}
+            >
+              {copyState === "copied" ? <Check /> : <CopySimple />}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </article>
   )
@@ -286,10 +354,17 @@ export function App() {
   const dismissError = useChatStore((state) => state.dismissError)
   const setSelectedModel = useChatStore((state) => state.setSelectedModel)
   const scrollViewportRef = useRef<HTMLDivElement | null>(null)
-  const stickToBottomRef = useRef(true)
+  const isNearBottomRef = useRef(true)
+  const copyFeedbackTimeoutRef = useRef<number | null>(null)
   const previousMessageCountRef = useRef(0)
   const previousLastMessageIdRef = useRef<string | null>(null)
   const previousLastMessageLengthRef = useRef(0)
+  const [copiedMessageState, setCopiedMessageState] = useState<{
+    messageId: string
+    status: "copied" | "error"
+  } | null>(null)
+  const [isNearBottom, setIsNearBottom] = useState(true)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
   const selectedModel = getModelConfig(selectedModelId)
   const busy =
@@ -300,6 +375,9 @@ export function App() {
     messages.at(-1)?.role !== "user"
   const canSend = composer.trim().length > 0 && !busy
   const showHeaderChip = hasLoadedModel && !error
+  const showComposerStatus =
+    Boolean(error) || runtimeStatus === "loading-model" || !hasLoadedModel
+  const shouldShowScrollToBottom = showScrollToBottom && !isNearBottom
   const headerChipLabel = [
     selectedModel.shortLabel,
     activeDevice?.toUpperCase(),
@@ -320,24 +398,36 @@ export function App() {
   }, [loadProgress])
 
   useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const viewport = scrollViewportRef.current
     if (!viewport) {
       return
     }
 
-    const handleScroll = () => {
+    const updateScrollState = () => {
       const distanceFromBottom =
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-      stickToBottomRef.current = distanceFromBottom < 48
+      const nextIsNearBottom = distanceFromBottom < 56
+
+      isNearBottomRef.current = nextIsNearBottom
+      setIsNearBottom(nextIsNearBottom)
+      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom)
     }
 
-    handleScroll()
-    viewport.addEventListener("scroll", handleScroll)
+    updateScrollState()
+    viewport.addEventListener("scroll", updateScrollState)
 
     return () => {
-      viewport.removeEventListener("scroll", handleScroll)
+      viewport.removeEventListener("scroll", updateScrollState)
     }
-  }, [])
+  }, [messages.length])
 
   useEffect(() => {
     const viewport = scrollViewportRef.current
@@ -355,12 +445,20 @@ export function App() {
       previousLastMessageLengthRef.current !== lastMessageLength
 
     const rafId = window.requestAnimationFrame(() => {
-      if (stickToBottomRef.current && (isNewMessage || isStreamingUpdate)) {
+      if (isNearBottomRef.current && (isNewMessage || isStreamingUpdate)) {
         viewport.scrollTo({
           top: viewport.scrollHeight,
           behavior: isNewMessage ? "smooth" : "auto",
         })
       }
+
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      const nextIsNearBottom = distanceFromBottom < 56
+
+      isNearBottomRef.current = nextIsNearBottom
+      setIsNearBottom(nextIsNearBottom)
+      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom)
 
       previousMessageCountRef.current = messages.length
       previousLastMessageIdRef.current = lastMessage?.id ?? null
@@ -372,8 +470,46 @@ export function App() {
     }
   }, [messages])
 
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    isNearBottomRef.current = true
+    setIsNearBottom(true)
+    setShowScrollToBottom(false)
+    viewport.scrollTo({
+      top: viewport.scrollHeight,
+      behavior,
+    })
+  }
+
+  const handleCopyMessage = async (message: ChatMessage) => {
+    if (message.content.trim().length === 0) {
+      return
+    }
+
+    try {
+      await copyToClipboard(message.content)
+      setCopiedMessageState({ messageId: message.id, status: "copied" })
+    } catch {
+      setCopiedMessageState({ messageId: message.id, status: "error" })
+    }
+
+    if (copyFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimeoutRef.current)
+    }
+
+    copyFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setCopiedMessageState((current) =>
+        current?.messageId === message.id ? null : current
+      )
+    }, 1800)
+  }
+
   return (
-    <div className="min-h-svh bg-background text-foreground">
+    <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
       <header className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between gap-2 px-3 sm:px-4">
           <div className="min-w-0">
@@ -385,7 +521,7 @@ export function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <Select
               value={selectedModelId}
               onValueChange={(value) =>
@@ -394,26 +530,25 @@ export function App() {
             >
               <SelectTrigger
                 aria-label="Select model"
-                className="max-w-32 border-border bg-card text-foreground hover:bg-accent"
+                className="w-[8.75rem] border-border bg-card text-foreground hover:bg-accent sm:w-[11rem]"
                 size="sm"
               >
-                <span className="truncate">
-                  {selectedModel.shortLabel}
-                </span>
+                <span className="truncate">{selectedModel.label}</span>
               </SelectTrigger>
-              <SelectContent align="end">
+              <SelectContent align="end" className="min-w-64 sm:min-w-72">
                 <SelectGroup>
                   {availableModels.map((model) => (
                     <SelectItem
                       key={model.id}
+                      className="items-start py-2.5"
                       disabled={model.disabled}
                       value={model.id}
                     >
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-medium text-foreground">
+                      <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 whitespace-normal">
+                        <span className="leading-4 font-medium text-foreground">
                           {model.label}
                         </span>
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-[11px] leading-4 text-muted-foreground">
                           {model.disabled
                             ? "Desktop recommended"
                             : model.description}
@@ -427,7 +562,7 @@ export function App() {
 
             {showHeaderChip ? (
               <Badge
-                className="hidden border-primary/25 bg-primary/10 text-primary sm:inline-flex"
+                className="hidden shrink-0 border-primary/25 bg-primary/10 text-primary sm:inline-flex"
                 variant="outline"
               >
                 {headerChipLabel}
@@ -451,10 +586,10 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto flex min-h-svh w-full max-w-3xl flex-col px-3 pt-16 sm:px-4">
+      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pt-16 sm:px-4">
         <div
           ref={scrollViewportRef}
-          className="flex-1 overflow-y-auto overscroll-contain pb-[calc(12rem+env(safe-area-inset-bottom))]"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(12rem+env(safe-area-inset-bottom))]"
         >
           {messages.length === 0 ? (
             <EmptyState
@@ -465,12 +600,43 @@ export function App() {
           ) : (
             <div className="flex flex-col gap-3 py-4">
               {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+                <MessageBubble
+                  key={message.id}
+                  copyState={
+                    copiedMessageState?.messageId === message.id
+                      ? copiedMessageState.status
+                      : null
+                  }
+                  message={message}
+                  onCopy={handleCopyMessage}
+                />
               ))}
             </div>
           )}
         </div>
       </main>
+
+      {shouldShowScrollToBottom ? (
+        <div
+          className={`pointer-events-none fixed inset-x-0 z-20 ${
+            showComposerStatus
+              ? "bottom-[calc(11rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9.5rem+env(safe-area-inset-bottom))]"
+              : "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
+          }`}
+        >
+          <div className="mx-auto flex w-full max-w-3xl justify-end px-3 sm:px-4">
+            <Button
+              aria-label="Scroll to latest messages"
+              className="pointer-events-auto border border-border shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
+              size="icon-sm"
+              variant="secondary"
+              onClick={() => scrollToBottom()}
+            >
+              <ArrowDown />
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
