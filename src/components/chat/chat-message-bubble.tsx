@@ -54,9 +54,6 @@ export function ChatMessageBubble({
             content={fallbackContent}
             streaming={message.state === "streaming"}
           />
-          {message.state === "streaming" ? (
-            <span className="mt-2 inline-flex size-2 animate-pulse bg-current align-middle opacity-80" />
-          ) : null}
         </div>
         <div
           className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-muted-foreground ${

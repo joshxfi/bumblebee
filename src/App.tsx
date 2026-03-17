@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
 
-import { ChatComposerStatus } from "@/components/chat/chat-composer-status"
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageBubble } from "@/components/chat/chat-message-bubble"
+import { ChatPrepareModel } from "@/components/chat/chat-prepare-model"
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button"
-import { copyToClipboard, statusTone } from "@/components/chat/chat-ui"
-import { Badge } from "@/components/ui/badge"
+import { copyToClipboard } from "@/components/chat/chat-ui"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { formatBytes, getModelConfig } from "@/lib/chat-config"
@@ -18,11 +17,9 @@ export function App() {
   const messages = useChatStore((state) => state.messages)
   const composer = useChatStore((state) => state.composer)
   const runtimeStatus = useChatStore((state) => state.runtimeStatus)
-  const loadProgress = useChatStore((state) => state.loadProgress)
   const error = useChatStore((state) => state.error)
-  const pendingStop = useChatStore((state) => state.pendingStop)
   const hasLoadedModel = useChatStore((state) => state.hasLoadedModel)
-  const activeDevice = useChatStore((state) => state.activeDevice)
+  const loadProgress = useChatStore((state) => state.loadProgress)
   const availableModels = useChatStore((state) => state.availableModels)
   const selectedModelId = useChatStore((state) => state.selectedModelId)
   const deviceProfile = useChatStore((state) => state.deviceProfile)
@@ -58,23 +55,22 @@ export function App() {
     messages.some((message) => message.role === "user") &&
     messages.at(-1)?.role !== "user"
   const canSend = composer.trim().length > 0 && !busy
-  const showHeaderChip = hasLoadedModel && !error
-  const showComposerStatus =
-    Boolean(error) || runtimeStatus === "loading-model" || !hasLoadedModel
   const shouldShowScrollToBottom = showScrollToBottom && !isNearBottom
   const continuableMessageId =
     messages.at(-1)?.role === "assistant" &&
     messages.at(-1)?.finishReason === "length"
       ? messages.at(-1)?.id ?? null
       : null
-  const headerChipLabel = [
-    selectedModel.shortLabel,
-    activeDevice?.toUpperCase(),
-    runtimeStatus === "generating" ? statusTone.generating.label : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ")
-
+  const showPrepareModel = !hasLoadedModel
+  const mascotTone = error
+    ? "error"
+    : runtimeStatus === "loading-model"
+      ? "loading"
+      : runtimeStatus === "generating"
+        ? "typing"
+        : runtimeStatus === "ready"
+      ? "ready"
+      : "idle"
   const progressMeta = !loadProgress
     ? null
     : (() => {
@@ -84,9 +80,9 @@ export function App() {
         return loaded && total ? `${loaded} / ${total}` : null
       })()
 
-  const scrollButtonOffsetClassName = showComposerStatus
-    ? "bottom-[calc(11rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9.5rem+env(safe-area-inset-bottom))]"
-    : "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
+  const scrollButtonOffsetClassName = showPrepareModel
+    ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
+    : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
 
   useEffect(() => {
     return () => {
@@ -204,20 +200,23 @@ export function App() {
       <ChatHeader
         availableModels={availableModels}
         canRetry={canRetry}
-        headerChipLabel={headerChipLabel}
+        mascotTone={mascotTone}
         messagesCount={messages.length}
         onClear={clearChat}
         onRetry={retryLastTurn}
         onSelectModel={setSelectedModel}
         selectedModelId={selectedModelId}
         selectedModelLabel={selectedModel.label}
-        showHeaderChip={showHeaderChip}
       />
 
       <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pt-16 sm:px-4">
         <div
           ref={scrollViewportRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(12rem+env(safe-area-inset-bottom))]"
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${
+            showPrepareModel
+              ? "pb-[calc(12rem+env(safe-area-inset-bottom))]"
+              : "pb-[calc(8.5rem+env(safe-area-inset-bottom))]"
+          }`}
         >
           {messages.length === 0 ? (
             <ChatEmptyState
@@ -258,33 +257,22 @@ export function App() {
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
-          <ChatComposerStatus
-            detail={
-              pendingStop
-                ? "Stopping generation..."
-                : (loadProgress?.detail ??
-                    `Ready to chat with ${selectedModel.label}.`)
-            }
-            deviceProfile={deviceProfile}
-            error={error}
-            hasLoadedModel={hasLoadedModel}
-            modelLabel={selectedModel.label}
-            onDismissError={dismissError}
-            onInitModel={initModel}
-            progress={loadProgress?.progress ?? null}
-            progressMeta={progressMeta}
-            runtimeStatus={runtimeStatus}
-          />
-
-          {showHeaderChip ? (
-            <Badge
-              className="w-fit border-primary/25 bg-primary/10 text-primary sm:hidden"
-              variant="outline"
-            >
-              {headerChipLabel}
-            </Badge>
+          {showPrepareModel ? (
+            <ChatPrepareModel
+              detail={
+                loadProgress?.detail ??
+                `Ready to prepare ${selectedModel.label}.`
+              }
+              deviceProfile={deviceProfile}
+              error={error}
+              modelLabel={selectedModel.label}
+              onDismissError={dismissError}
+              onInitModel={initModel}
+              progress={loadProgress?.progress ?? null}
+              progressMeta={progressMeta}
+              runtimeStatus={runtimeStatus}
+            />
           ) : null}
-
           <div className="border border-border bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
             <div className="flex items-end gap-2">
               <Textarea

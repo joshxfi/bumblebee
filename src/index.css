@@ -191,4 +191,136 @@
   .bumblebee-markdown :where(th, td) {
     @apply border border-border px-2 py-1.5 align-top;
   }
+
+  .bumblebee-logo {
+    @apply relative flex size-10 shrink-0 items-center justify-center border border-primary/30 bg-primary/10 text-lg text-primary;
+  }
+
+  .bumblebee-logo::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 1px solid color-mix(in oklch, var(--primary) 22%, transparent);
+    opacity: 0;
+  }
+
+  .bumblebee-logo__glyph {
+    transform-origin: center;
+  }
+
+  .bumblebee-logo--idle .bumblebee-logo__glyph {
+    animation: bee-hover 2.2s ease-in-out infinite;
+  }
+
+  .bumblebee-logo--loading .bumblebee-logo__glyph {
+    animation: bee-bob 0.95s ease-in-out infinite;
+  }
+
+  .bumblebee-logo--loading::after {
+    animation: bee-ping 1s ease-out infinite;
+  }
+
+  .bumblebee-logo--ready .bumblebee-logo__glyph {
+    animation: bee-rest 2.8s ease-in-out infinite;
+  }
+
+  .bumblebee-logo--typing .bumblebee-logo__glyph {
+    animation: bee-buzz 0.32s linear infinite;
+  }
+
+  .bumblebee-logo--typing::after {
+    animation: bee-ping 0.9s ease-out infinite;
+  }
+
+  .bumblebee-logo--error {
+    @apply border-destructive/40 bg-destructive/10 text-destructive;
+  }
+
+  .bumblebee-logo--error .bumblebee-logo__glyph {
+    animation: bee-jolt 0.55s ease-in-out infinite;
+  }
+
+  .bumblebee-logo--error::after {
+    border-color: color-mix(in oklch, var(--destructive) 34%, transparent);
+    animation: bee-ping 1.2s ease-out infinite;
+  }
+}
+
+@keyframes bee-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+
+  50% {
+    transform: translateY(-1px) rotate(4deg);
+  }
+}
+
+@keyframes bee-hover {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes bee-rest {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+
+  50% {
+    transform: rotate(2deg);
+  }
+}
+
+@keyframes bee-buzz {
+  0%,
+  100% {
+    transform: translateX(0) rotate(-3deg);
+  }
+
+  25% {
+    transform: translateX(-0.5px) rotate(2deg);
+  }
+
+  75% {
+    transform: translateX(0.5px) rotate(-1deg);
+  }
+}
+
+@keyframes bee-ping {
+  from {
+    opacity: 0.8;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes bee-jolt {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20% {
+    transform: translateX(-1px) rotate(-5deg);
+  }
+
+  40% {
+    transform: translateX(1px) rotate(5deg);
+  }
+
+  60% {
+    transform: translateX(-1px) rotate(-4deg);
+  }
 }

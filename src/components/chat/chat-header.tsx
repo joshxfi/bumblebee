@@ -1,7 +1,6 @@
 import { type ComponentProps } from "react"
 import { ArrowClockwiseIcon, TrashSimpleIcon } from "@phosphor-icons/react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -42,37 +41,46 @@ function HeaderAction({
 type ChatHeaderProps = {
   availableModels: ChatModelOption[]
   canRetry: boolean
-  headerChipLabel: string
   messagesCount: number
+  mascotTone: "error" | "idle" | "loading" | "ready" | "typing"
   onClear: () => void
   onRetry: () => void
   onSelectModel: (modelId: ChatModelId) => void
   selectedModelId: ChatModelId
   selectedModelLabel: string
-  showHeaderChip: boolean
 }
 
 export function ChatHeader({
   availableModels,
   canRetry,
-  headerChipLabel,
   messagesCount,
+  mascotTone,
   onClear,
   onRetry,
   onSelectModel,
   selectedModelId,
   selectedModelLabel,
-  showHeaderChip,
 }: ChatHeaderProps) {
   return (
     <header className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur-xl">
       <div className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between gap-2 px-3 sm:px-4">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-foreground">
-            Bumblebee
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            aria-label="Bumblebee"
+            className={`bumblebee-logo bumblebee-logo--${mascotTone}`}
+            role="img"
+          >
+            <span aria-hidden="true" className="bumblebee-logo__glyph">
+              🐝
+            </span>
           </div>
-          <div className="truncate text-xs text-muted-foreground">
-            On-device chat
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-foreground">
+              Bumblebee
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              On-device chat
+            </div>
           </div>
         </div>
 
@@ -83,7 +91,7 @@ export function ChatHeader({
           >
             <SelectTrigger
               aria-label="Select model"
-              className="w-[8.75rem] border-border bg-card text-foreground hover:bg-accent sm:w-[11rem]"
+              className="w-[9rem] border-border bg-card text-foreground hover:bg-accent sm:w-[11rem]"
               size="sm"
             >
               <span className="truncate">{selectedModelLabel}</span>
@@ -112,15 +120,6 @@ export function ChatHeader({
               </SelectGroup>
             </SelectContent>
           </Select>
-
-          {showHeaderChip ? (
-            <Badge
-              className="hidden shrink-0 border-primary/25 bg-primary/10 text-primary sm:inline-flex"
-              variant="outline"
-            >
-              {headerChipLabel}
-            </Badge>
-          ) : null}
           <HeaderAction
             disabled={!canRetry}
             label="Retry last response"
