@@ -1,13 +1,23 @@
-import type { WorkerEvent, WorkerRequest, ModelMessage } from "@/lib/chat-types"
+import type {
+  ChatModelId,
+  ModelMessage,
+  WorkerEvent,
+  WorkerRequest,
+} from "@/lib/chat-types"
 
 type ChatRuntimeListener = (event: WorkerEvent) => void
 
 export type ChatRuntime = {
   subscribe: (listener: ChatRuntimeListener) => () => void
-  init: () => void
-  generate: (requestId: string, messages: ModelMessage[]) => void
+  init: (modelId: ChatModelId) => void
+  generate: (
+    requestId: string,
+    modelId: ChatModelId,
+    messages: ModelMessage[]
+  ) => void
   stop: () => void
   reset: () => void
+  recreateWorker: () => void
   dispose: () => void
 }
 
@@ -18,12 +28,14 @@ type WorkerLike = Pick<
 
 export class ChatRuntimeClient implements ChatRuntime {
   private readonly listeners = new Set<ChatRuntimeListener>()
-  private readonly worker: WorkerLike
+  private readonly createWorker: () => WorkerLike
+  private currentModelId: ChatModelId | null = null
+  private worker: WorkerLike
 
   constructor(createWorker: () => WorkerLike = createDefaultWorker) {
+    this.createWorker = createWorker
     this.worker = createWorker()
-    this.worker.addEventListener("message", this.handleMessage as EventListener)
-    this.worker.addEventListener("error", this.handleError as EventListener)
+    this.bindWorker(this.worker)
   }
 
   subscribe(listener: ChatRuntimeListener) {
@@ -34,13 +46,16 @@ export class ChatRuntimeClient implements ChatRuntime {
     }
   }
 
-  init() {
-    this.worker.postMessage({ type: "init" } satisfies WorkerRequest)
+  init(modelId: ChatModelId) {
+    this.currentModelId = modelId
+    this.worker.postMessage({ type: "init", modelId } satisfies WorkerRequest)
   }
 
-  generate(requestId: string, messages: ModelMessage[]) {
+  generate(requestId: string, modelId: ChatModelId, messages: ModelMessage[]) {
+    this.currentModelId = modelId
     this.worker.postMessage({
       type: "generate",
+      modelId,
       requestId,
       messages,
     } satisfies WorkerRequest)
@@ -54,12 +69,16 @@ export class ChatRuntimeClient implements ChatRuntime {
     this.worker.postMessage({ type: "reset" } satisfies WorkerRequest)
   }
 
+  recreateWorker() {
+    this.currentModelId = null
+    this.unbindWorker(this.worker)
+    this.worker.terminate()
+    this.worker = this.createWorker()
+    this.bindWorker(this.worker)
+  }
+
   dispose() {
-    this.worker.removeEventListener(
-      "message",
-      this.handleMessage as EventListener
-    )
-    this.worker.removeEventListener("error", this.handleError as EventListener)
+    this.unbindWorker(this.worker)
     this.worker.terminate()
     this.listeners.clear()
   }
@@ -71,8 +90,19 @@ export class ChatRuntimeClient implements ChatRuntime {
   private readonly handleError = (event: ErrorEvent) => {
     this.emit({
       type: "error",
+      modelId: this.currentModelId ?? undefined,
       error: event.message || "The inference worker crashed.",
     })
+  }
+
+  private bindWorker(worker: WorkerLike) {
+    worker.addEventListener("message", this.handleMessage as EventListener)
+    worker.addEventListener("error", this.handleError as EventListener)
+  }
+
+  private unbindWorker(worker: WorkerLike) {
+    worker.removeEventListener("message", this.handleMessage as EventListener)
+    worker.removeEventListener("error", this.handleError as EventListener)
   }
 
   private emit(event: WorkerEvent) {
@@ -95,6 +125,7 @@ function createNoopRuntime(): ChatRuntime {
     generate: () => undefined,
     stop: () => undefined,
     reset: () => undefined,
+    recreateWorker: () => undefined,
     dispose: () => undefined,
   }
 }

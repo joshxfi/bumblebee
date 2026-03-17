@@ -7,11 +7,12 @@ import {
   type PretrainedModelOptions,
 } from "@huggingface/transformers"
 
-import { CHAT_MODEL_CONFIG } from "@/lib/chat-config"
+import { getModelConfig } from "@/lib/chat-config"
 import type {
   ChatDevice,
-  ModelMessage,
+  ChatModelId,
   ModelLoadProgress,
+  ModelMessage,
   WorkerEvent,
   WorkerRequest,
 } from "@/lib/chat-types"
@@ -27,20 +28,22 @@ type ProgressPayload = {
   total?: number
 }
 
-env.allowLocalModels = false
-env.useBrowserCache = true
-
-let generator: Generator | null = null
-let loadPromise: Promise<Generator> | null = null
-let activeRequestId: string | null = null
-let activeDevice: ChatDevice = "wasm"
-const interruptable = new InterruptableStoppingCriteria()
-
 type WebGpuNavigator = Navigator & {
   gpu?: {
     requestAdapter: () => Promise<unknown>
   }
 }
+
+env.allowLocalModels = false
+env.useBrowserCache = true
+
+let generator: Generator | null = null
+let loadedModelId: ChatModelId | null = null
+let loadPromise: Promise<Generator> | null = null
+let loadingModelId: ChatModelId | null = null
+let activeRequestId: string | null = null
+let activeDevice: ChatDevice = "wasm"
+const interruptable = new InterruptableStoppingCriteria()
 
 function postMessage(event: WorkerEvent) {
   self.postMessage(event)
@@ -100,39 +103,40 @@ function getErrorMessage(error: unknown) {
   return "Model execution failed."
 }
 
-async function loadGenerator(): Promise<Generator> {
-  if (generator) {
+async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
+  if (generator && loadedModelId === modelId) {
     return generator
   }
 
-  if (loadPromise) {
+  if (loadPromise && loadingModelId === modelId) {
     return loadPromise
   }
 
   const candidates = await getDeviceCandidates()
+  const model = getModelConfig(modelId)
 
+  loadingModelId = modelId
   loadPromise = (async () => {
     let lastError: unknown = null
 
     for (const candidate of candidates) {
-      const deviceLabel = candidate
-
       try {
         postMessage({
           type: "progress",
+          modelId,
           progress: {
             phase: "Warm up",
             progress: null,
             detail:
-              deviceLabel === "webgpu"
-                ? "Trying WebGPU first for faster local generation."
-                : "Loading the CPU/WASM runtime.",
+              candidate === "webgpu"
+                ? `Trying WebGPU first for ${model.label}.`
+                : `Loading ${model.label} with the CPU/WASM runtime.`,
           },
         })
 
         const options: PretrainedModelOptions = {
           device: candidate,
-          dtype: CHAT_MODEL_CONFIG.dtype,
+          dtype: model.dtype,
           progress_callback: (payload: ProgressPayload) => {
             if (payload.status === "ready") {
               return
@@ -140,30 +144,28 @@ async function loadGenerator(): Promise<Generator> {
 
             postMessage({
               type: "progress",
+              modelId,
               progress: normalizeProgress(
                 payload,
-                deviceLabel === "webgpu"
-                  ? "Loading model files for WebGPU."
-                  : "Loading model files for mobile-safe CPU inference."
+                candidate === "webgpu"
+                  ? `Loading ${model.label} for WebGPU.`
+                  : `Loading ${model.label} for mobile-safe CPU inference.`
               ),
             })
           },
         }
 
-        const loaded = await pipeline(
-          "text-generation",
-          CHAT_MODEL_CONFIG.modelId,
-          options
-        )
+        const loaded = await pipeline("text-generation", model.modelId, options)
 
         generator = loaded
+        loadedModelId = modelId
         activeDevice = candidate
 
         postMessage({
           type: "ready",
+          modelId,
           device: activeDevice,
-          dtype: CHAT_MODEL_CONFIG.dtype,
-          modelId: CHAT_MODEL_CONFIG.modelId,
+          dtype: model.dtype,
         })
 
         return loaded
@@ -173,6 +175,7 @@ async function loadGenerator(): Promise<Generator> {
         if (candidate === "webgpu") {
           postMessage({
             type: "progress",
+            modelId,
             progress: {
               phase: "Fallback",
               progress: null,
@@ -187,16 +190,22 @@ async function loadGenerator(): Promise<Generator> {
     throw lastError ?? new Error("Unable to initialize the chat model.")
   })().finally(() => {
     loadPromise = null
+    loadingModelId = null
   })
 
   return loadPromise
 }
 
-async function runGeneration(requestId: string, messages: ModelMessage[]) {
+async function runGeneration(
+  requestId: string,
+  modelId: ChatModelId,
+  messages: ModelMessage[]
+) {
   activeRequestId = requestId
 
   try {
-    const activeGenerator = await loadGenerator()
+    const activeGenerator = await loadGenerator(modelId)
+    const model = getModelConfig(modelId)
     interruptable.reset()
 
     const stoppingCriteria = new StoppingCriteriaList()
@@ -208,13 +217,13 @@ async function runGeneration(requestId: string, messages: ModelMessage[]) {
           return
         }
 
-        postMessage({ type: "token", requestId, text })
+        postMessage({ type: "token", modelId, requestId, text })
       },
       skip_prompt: true,
     })
 
     await activeGenerator(messages, {
-      ...CHAT_MODEL_CONFIG.generation,
+      ...model.generation,
       stopping_criteria: stoppingCriteria,
       streamer,
     } as Parameters<Generator>[1] & {
@@ -223,12 +232,14 @@ async function runGeneration(requestId: string, messages: ModelMessage[]) {
 
     postMessage({
       type: "complete",
+      modelId,
       requestId,
       finishReason: interruptable.interrupted ? "stopped" : "completed",
     })
   } catch (error) {
     postMessage({
       type: "error",
+      modelId,
       error: getErrorMessage(error),
       requestId,
     })
@@ -243,9 +254,10 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
 
   switch (payload.type) {
     case "init": {
-      void loadGenerator().catch((error) => {
+      void loadGenerator(payload.modelId).catch((error) => {
         postMessage({
           type: "error",
+          modelId: payload.modelId,
           error: getErrorMessage(error),
         })
       })
@@ -253,7 +265,7 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
     }
 
     case "generate": {
-      void runGeneration(payload.requestId, payload.messages)
+      void runGeneration(payload.requestId, payload.modelId, payload.messages)
       return
     }
 

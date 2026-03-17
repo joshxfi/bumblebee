@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@source "../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -141,5 +142,53 @@
 
   ::selection {
     background: color-mix(in oklch, var(--primary) 28%, transparent);
+  }
+}
+
+@layer components {
+  .bumblebee-markdown {
+    --link-color: var(--primary);
+    @apply flex flex-col gap-3 break-words;
+  }
+
+  .bumblebee-markdown :where(p, ul, ol, blockquote, pre) {
+    @apply m-0;
+  }
+
+  .bumblebee-markdown :where(ul, ol) {
+    @apply pl-5;
+  }
+
+  .bumblebee-markdown :where(li) {
+    @apply mt-1;
+  }
+
+  .bumblebee-markdown :where(code) {
+    @apply border border-border bg-background/70 px-1.5 py-0.5 text-[0.92em];
+  }
+
+  .bumblebee-markdown :where(pre) {
+    @apply overflow-x-auto border border-border bg-background/80 p-3 text-xs leading-6;
+  }
+
+  .bumblebee-markdown :where(pre code) {
+    @apply border-0 bg-transparent p-0 text-inherit;
+  }
+
+  .bumblebee-markdown :where(blockquote) {
+    @apply border-l-2 border-primary/50 pl-3 text-muted-foreground;
+  }
+
+  .bumblebee-markdown :where(a) {
+    color: var(--link-color);
+    @apply font-medium underline underline-offset-4;
+  }
+
+  .bumblebee-markdown :where(table) {
+    @apply w-full border-collapse text-left text-xs;
+  }
+
+  .bumblebee-markdown :where(th, td) {
+    @apply border border-border px-2 py-1.5 align-top;
   }
 }

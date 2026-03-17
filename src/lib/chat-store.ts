@@ -1,12 +1,23 @@
-import { createStore, type StoreApi } from "zustand/vanilla"
 import { useStore } from "zustand"
+import { createStore, type StoreApi } from "zustand/vanilla"
 
-import { CHAT_MODEL_CONFIG } from "@/lib/chat-config"
-import { getDefaultChatRuntime, type ChatRuntime } from "@/lib/chat-runtime"
+import {
+  getDefaultChatRuntime,
+  type ChatRuntime,
+} from "@/lib/chat-runtime"
+import {
+  getDeviceProfile,
+  getModelConfig,
+  getModelOptions,
+  getRecommendedModelId,
+} from "@/lib/chat-config"
 import type {
   ChatDevice,
   ChatMessage,
   ChatMessageState,
+  ChatModelId,
+  ChatModelOption,
+  DeviceProfile,
   ModelLoadProgress,
   ModelMessage,
   RuntimeStatus,
@@ -17,19 +28,23 @@ type ChatStoreState = {
   activeAssistantId: string | null
   activeDevice: ChatDevice | null
   activeRequestId: string | null
+  availableModels: ChatModelOption[]
   composer: string
+  deviceProfile: DeviceProfile
   error: string | null
   hasLoadedModel: boolean
   loadProgress: ModelLoadProgress | null
   messages: ChatMessage[]
   pendingStop: boolean
   runtimeStatus: RuntimeStatus
+  selectedModelId: ChatModelId
   clearChat: () => void
   dismissError: () => void
   initModel: () => void
   retryLastTurn: () => void
   sendMessage: (value?: string) => void
   setComposer: (value: string) => void
+  setSelectedModel: (modelId: ChatModelId) => void
   stopGeneration: () => void
 }
 
@@ -41,13 +56,12 @@ type MutableChatState = Omit<
   | "retryLastTurn"
   | "sendMessage"
   | "setComposer"
+  | "setSelectedModel"
   | "stopGeneration"
 >
 
-const initialLoadProgress: ModelLoadProgress = {
-  phase: "Warm up",
-  progress: 0,
-  detail: "Fetching tokenizer and model shards...",
+type CreateChatStoreOptions = {
+  deviceProfile?: DeviceProfile
 }
 
 function createId() {
@@ -69,6 +83,14 @@ function createChatMessage(
     content,
     createdAt: Date.now(),
     state,
+  }
+}
+
+function createInitialLoadProgress(modelId: ChatModelId): ModelLoadProgress {
+  return {
+    phase: "Warm up",
+    progress: 0,
+    detail: `Fetching ${getModelConfig(modelId).label} tokenizer and model shards...`,
   }
 }
 
@@ -150,24 +172,42 @@ function getBusyStatus(hasLoadedModel: boolean): RuntimeStatus {
   return hasLoadedModel ? "generating" : "loading-model"
 }
 
-function createBaseState(): MutableChatState {
+function createBaseState(
+  deviceProfile: DeviceProfile = getDeviceProfile()
+): MutableChatState {
+  const selectedModelId = getRecommendedModelId(deviceProfile)
+
   return {
     activeAssistantId: null,
     activeDevice: null,
     activeRequestId: null,
+    availableModels: getModelOptions(deviceProfile),
     composer: "",
+    deviceProfile,
     error: null,
     hasLoadedModel: false,
     loadProgress: null,
     messages: [],
     pendingStop: false,
     runtimeStatus: "idle",
+    selectedModelId,
   }
 }
 
-export function createChatStore(runtime: ChatRuntime) {
+function isModelSelectable(state: MutableChatState, modelId: ChatModelId) {
+  return state.availableModels.some(
+    (model) => model.id === modelId && model.disabled === false
+  )
+}
+
+export function createChatStore(
+  runtime: ChatRuntime,
+  options: CreateChatStoreOptions = {}
+) {
+  const initialState = createBaseState(options.deviceProfile)
+
   return createStore<ChatStoreState>((set, get) => ({
-    ...createBaseState(),
+    ...initialState,
     clearChat: () => {
       runtime.reset()
 
@@ -205,10 +245,11 @@ export function createChatStore(runtime: ChatRuntime) {
 
       set({
         error: null,
-        loadProgress: state.loadProgress ?? initialLoadProgress,
+        loadProgress:
+          state.loadProgress ?? createInitialLoadProgress(state.selectedModelId),
         runtimeStatus: "loading-model",
       })
-      runtime.init()
+      runtime.init(state.selectedModelId)
     },
     retryLastTurn: () => {
       const state = get()
@@ -230,12 +271,20 @@ export function createChatStore(runtime: ChatRuntime) {
         activeAssistantId: assistantMessage.id,
         activeRequestId: assistantMessage.id,
         error: null,
+        loadProgress: state.hasLoadedModel
+          ? state.loadProgress
+          : (state.loadProgress ??
+              createInitialLoadProgress(state.selectedModelId)),
         messages: [...history, assistantMessage],
         pendingStop: false,
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
       })
 
-      runtime.generate(assistantMessage.id, toModelMessages(history))
+      runtime.generate(
+        assistantMessage.id,
+        state.selectedModelId,
+        toModelMessages(history)
+      )
     },
     sendMessage: (value) => {
       const state = get()
@@ -263,16 +312,52 @@ export function createChatStore(runtime: ChatRuntime) {
         error: null,
         loadProgress: state.hasLoadedModel
           ? state.loadProgress
-          : (state.loadProgress ?? initialLoadProgress),
+          : (state.loadProgress ??
+              createInitialLoadProgress(state.selectedModelId)),
         messages: nextMessages,
         pendingStop: false,
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
       })
 
-      runtime.generate(assistantMessage.id, toModelMessages(nextMessages))
+      runtime.generate(
+        assistantMessage.id,
+        state.selectedModelId,
+        toModelMessages(nextMessages)
+      )
     },
     setComposer: (value) => {
       set({ composer: value })
+    },
+    setSelectedModel: (modelId) => {
+      const state = get()
+      if (
+        state.selectedModelId === modelId ||
+        !isModelSelectable(state, modelId)
+      ) {
+        return
+      }
+
+      if (state.runtimeStatus === "generating") {
+        runtime.stop()
+      }
+
+      runtime.reset()
+      runtime.recreateWorker()
+
+      set((currentState) => ({
+        ...currentState,
+        activeAssistantId: null,
+        activeDevice: null,
+        activeRequestId: null,
+        composer: "",
+        error: null,
+        hasLoadedModel: false,
+        loadProgress: null,
+        messages: [],
+        pendingStop: false,
+        runtimeStatus: "idle",
+        selectedModelId: modelId,
+      }))
     },
     stopGeneration: () => {
       if (get().runtimeStatus !== "generating") {
@@ -285,41 +370,62 @@ export function createChatStore(runtime: ChatRuntime) {
   }))
 }
 
+function eventTargetsSelectedModel(
+  state: ChatStoreState,
+  event: WorkerEvent
+): boolean {
+  return event.modelId === undefined || event.modelId === state.selectedModelId
+}
+
 export function applyWorkerEvent(
   store: StoreApi<ChatStoreState>,
   event: WorkerEvent
 ) {
   switch (event.type) {
     case "progress": {
-      store.setState((state) => ({
-        error: null,
-        loadProgress: event.progress,
-        runtimeStatus:
-          state.activeAssistantId !== null ? "loading-model" : "loading-model",
-      }))
+      store.setState((state) => {
+        if (!eventTargetsSelectedModel(state, event)) {
+          return state
+        }
+
+        return {
+          error: null,
+          loadProgress: event.progress,
+          runtimeStatus: "loading-model" as const,
+        }
+      })
       return
     }
 
     case "ready": {
-      store.setState((state) => ({
-        activeDevice: event.device,
-        error: null,
-        hasLoadedModel: true,
-        loadProgress: {
-          phase: "Ready",
-          progress: 100,
-          detail: `${CHAT_MODEL_CONFIG.label} is loaded on ${event.device.toUpperCase()}.`,
-        },
-        runtimeStatus: state.activeAssistantId ? "generating" : "ready",
-      }))
+      store.setState((state) => {
+        if (!eventTargetsSelectedModel(state, event)) {
+          return state
+        }
+
+        const model = getModelConfig(event.modelId)
+
+        return {
+          activeDevice: event.device,
+          error: null,
+          hasLoadedModel: true,
+          loadProgress: {
+            phase: "Ready",
+            progress: 100,
+            detail: `${model.label} is loaded on ${event.device.toUpperCase()}.`,
+          },
+          runtimeStatus: state.activeAssistantId ? "generating" : "ready",
+        }
+      })
       return
     }
 
     case "token": {
       store.setState((state) => {
         if (
-          state.activeRequestId !== null &&
-          state.activeRequestId !== event.requestId
+          !eventTargetsSelectedModel(state, event) ||
+          (state.activeRequestId !== null &&
+            state.activeRequestId !== event.requestId)
         ) {
           return state
         }
@@ -340,8 +446,9 @@ export function applyWorkerEvent(
     case "complete": {
       store.setState((state) => {
         if (
-          state.activeRequestId !== null &&
-          state.activeRequestId !== event.requestId
+          !eventTargetsSelectedModel(state, event) ||
+          (state.activeRequestId !== null &&
+            state.activeRequestId !== event.requestId)
         ) {
           return state
         }
@@ -365,6 +472,10 @@ export function applyWorkerEvent(
 
     case "error": {
       store.setState((state) => {
+        if (!eventTargetsSelectedModel(state, event)) {
+          return state
+        }
+
         const shouldHandleActiveRequest =
           !event.requestId || state.activeRequestId === event.requestId
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { createChatStore, applyWorkerEvent } from "@/lib/chat-store"
+import { applyWorkerEvent, createChatStore } from "@/lib/chat-store"
 import type { ChatRuntime } from "@/lib/chat-runtime"
 import type { WorkerEvent } from "@/lib/chat-types"
 
@@ -13,11 +13,14 @@ function createRuntimeStub(): ChatRuntime & {
     events,
     subscribe: () => () => undefined,
     dispose: () => undefined,
-    generate: vi.fn((requestId, messages) => {
-      events.push({ type: "generate", payload: { requestId, messages } })
+    generate: vi.fn((requestId, modelId, messages) => {
+      events.push({ type: "generate", payload: { requestId, modelId, messages } })
     }),
-    init: vi.fn(() => {
-      events.push({ type: "init" })
+    init: vi.fn((modelId) => {
+      events.push({ type: "init", payload: { modelId } })
+    }),
+    recreateWorker: vi.fn(() => {
+      events.push({ type: "recreateWorker" })
     }),
     reset: vi.fn(() => {
       events.push({ type: "reset" })
@@ -29,7 +32,7 @@ function createRuntimeStub(): ChatRuntime & {
 }
 
 describe("chat store", () => {
-  it("queues a user turn and requests generation", () => {
+  it("queues a user turn and requests generation with the selected model", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
@@ -44,7 +47,11 @@ describe("chat store", () => {
     expect(state.messages[1]?.role).toBe("assistant")
     expect(state.messages[1]?.state).toBe("streaming")
     expect(state.runtimeStatus).toBe("loading-model")
-    expect(runtime.generate).toHaveBeenCalledTimes(1)
+    expect(runtime.generate).toHaveBeenCalledWith(
+      expect.any(String),
+      state.selectedModelId,
+      expect.any(Array)
+    )
   })
 
   it("hydrates streaming chunks and completes back to ready", () => {
@@ -53,20 +60,23 @@ describe("chat store", () => {
 
     store.getState().sendMessage("Give me a concise summary.")
     const requestId = store.getState().activeRequestId
+    const modelId = store.getState().selectedModelId
 
     applyWorkerEvent(store, {
       type: "ready",
+      modelId,
       device: "wasm",
       dtype: "q4",
-      modelId: "demo",
     })
     applyWorkerEvent(store, {
       type: "token",
+      modelId,
       requestId: requestId!,
       text: "Local inference keeps data in the browser.",
     })
     applyWorkerEvent(store, {
       type: "complete",
+      modelId,
       requestId: requestId!,
       finishReason: "completed",
     })
@@ -79,38 +89,51 @@ describe("chat store", () => {
     expect(assistant?.state).toBe("done")
   })
 
-  it("stops generation and clears the thread without unloading the model", () => {
+  it("resets state and recreates the worker when switching models", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
     store.getState().sendMessage("Write a slogan.")
-    store.setState({ hasLoadedModel: true, runtimeStatus: "generating" })
-    store.getState().stopGeneration()
-    store.getState().clearChat()
+    store.getState().setSelectedModel("smollm2-135m")
 
-    expect(runtime.stop).toHaveBeenCalledTimes(1)
     expect(runtime.reset).toHaveBeenCalledTimes(1)
+    expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
     expect(store.getState().messages).toHaveLength(0)
-    expect(store.getState().runtimeStatus).toBe("ready")
+    expect(store.getState().runtimeStatus).toBe("idle")
+    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(store.getState().hasLoadedModel).toBe(false)
   })
 
-  it("records worker errors against the active assistant turn", () => {
+  it("defaults constrained devices to the smaller model and rejects the desktop model", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime, { deviceProfile: "constrained" })
+
+    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(
+      store.getState().availableModels.find((model) => model.id === "lfm2-350m")
+        ?.disabled
+    ).toBe(true)
+
+    store.getState().setSelectedModel("lfm2-350m")
+
+    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(runtime.recreateWorker).not.toHaveBeenCalled()
+  })
+
+  it("ignores stale worker events from a previous model", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
-    store.getState().sendMessage("Trigger an error.")
+    store.getState().sendMessage("Trigger stale events.")
     const requestId = store.getState().activeRequestId
 
     applyWorkerEvent(store, {
-      type: "error",
+      type: "token",
+      modelId: "smollm2-135m",
       requestId: requestId!,
-      error: "Model execution failed.",
+      text: "stale",
     } satisfies WorkerEvent)
 
-    const assistant = store.getState().messages.at(-1)
-
-    expect(store.getState().runtimeStatus).toBe("error")
-    expect(store.getState().error).toBe("Model execution failed.")
-    expect(assistant?.state).toBe("error")
+    expect(store.getState().messages.at(-1)?.content).toBe("")
   })
 })
