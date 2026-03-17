@@ -1,44 +1,25 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, type ComponentProps } from "react"
 import {
   ArrowClockwise,
   ArrowUpRight,
   Cpu,
   Lightning,
   PaperPlaneTilt,
-  Sparkle,
   Stop,
   TrashSimple,
   Warning,
 } from "@phosphor-icons/react"
 
-import { CHAT_COPY, CHAT_MODEL_CONFIG, formatBytes } from "@/lib/chat-config"
+import { CHAT_MODEL_CONFIG, formatBytes } from "@/lib/chat-config"
 import { useChatStore } from "@/lib/chat-store"
 import type { ChatMessage, RuntimeStatus } from "@/lib/chat-types"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
 import {
   Progress,
   ProgressLabel,
   ProgressValue,
 } from "@/components/ui/progress"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Tooltip,
@@ -47,9 +28,10 @@ import {
 } from "@/components/ui/tooltip"
 
 const starterPrompts = [
-  "Explain what makes small language models practical in the browser.",
-  "Draft a three-bullet summary of WebGPU vs WASM for mobile inference.",
-  "Write a friendly onboarding blurb for an ephemeral chat app.",
+  "Tell me a short joke.",
+  "Give me three weekend ideas.",
+  "Help me write a friendly text reply.",
+  "Suggest a quick dinner idea.",
 ]
 
 const statusTone: Record<
@@ -59,32 +41,30 @@ const statusTone: Record<
     variant: "default" | "secondary" | "outline" | "destructive"
   }
 > = {
-  idle: { label: "Cold start", variant: "outline" },
-  "loading-model": { label: "Loading model", variant: "secondary" },
+  idle: { label: "Cold", variant: "outline" },
+  "loading-model": { label: "Loading", variant: "secondary" },
   ready: { label: "Ready", variant: "default" },
-  generating: { label: "Generating", variant: "secondary" },
-  error: { label: "Needs attention", variant: "destructive" },
+  generating: { label: "Typing", variant: "secondary" },
+  error: { label: "Error", variant: "destructive" },
 }
 
-function IconButton({
+function HeaderAction({
   label,
-  children,
   ...props
-}: React.ComponentProps<typeof Button> & { label: string }) {
+}: ComponentProps<typeof Button> & { label: string }) {
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Button
             aria-label={label}
+            className="border-white/10 bg-card text-foreground hover:bg-accent"
             size="icon-sm"
             variant="outline"
             {...props}
           />
         }
-      >
-        {children}
-      </TooltipTrigger>
+      />
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   )
@@ -97,8 +77,159 @@ function formatTimestamp(value: number) {
   }).format(value)
 }
 
-function getMessageLabel(message: ChatMessage) {
-  return message.role === "assistant" ? "Local model" : "You"
+function EmptyState({
+  busy,
+  onPrompt,
+}: {
+  busy: boolean
+  onPrompt: (prompt: string) => void
+}) {
+  return (
+    <div className="flex min-h-full flex-col justify-center px-4 py-12">
+      <div className="max-w-md space-y-3">
+        <Badge
+          className="border-primary/25 bg-primary/10 text-primary"
+          variant="outline"
+        >
+          On-device and ephemeral
+        </Badge>
+        <h1 className="text-2xl font-medium tracking-tight text-foreground">
+          Start chatting with Bumblebee
+        </h1>
+        <p className="text-sm/6 text-muted-foreground">
+          Everything stays in this tab. Pick a starter or type your own message.
+        </p>
+      </div>
+
+      <div className="mt-8 flex max-w-xl flex-col gap-2">
+        {starterPrompts.map((prompt) => (
+          <Button
+            key={prompt}
+            className="justify-start border-white/10 bg-card px-4 py-5 text-left text-foreground hover:bg-accent"
+            disabled={busy}
+            variant="outline"
+            onClick={() => onPrompt(prompt)}
+          >
+            <ArrowUpRight data-icon="inline-start" />
+            <span className="truncate">{prompt}</span>
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  const assistant = message.role === "assistant"
+
+  return (
+    <article
+      className={`flex flex-col gap-1 ${
+        assistant ? "items-start" : "items-end"
+      }`}
+    >
+      <div
+        className={`max-w-[86%] border px-4 py-3 text-sm/6 shadow-[0_6px_18px_rgba(0,0,0,0.16)] sm:max-w-[72%] ${
+          assistant
+            ? "border-white/10 bg-card text-foreground"
+            : "border-primary bg-primary text-primary-foreground"
+        }`}
+      >
+        {message.content || (
+          <span className="text-muted-foreground">
+            {message.state === "error"
+              ? "Response failed before any text arrived."
+              : " "}
+          </span>
+        )}
+        {message.state === "streaming" ? (
+          <span className="ml-1 inline-flex size-2 animate-pulse bg-current align-middle opacity-80" />
+        ) : null}
+      </div>
+      <div className="px-1 text-[11px] text-muted-foreground">
+        {assistant ? "Bumblebee" : "You"} · {formatTimestamp(message.createdAt)}
+      </div>
+    </article>
+  )
+}
+
+function ComposerStatus({
+  detail,
+  error,
+  hasLoadedModel,
+  onDismissError,
+  onInitModel,
+  progress,
+  progressMeta,
+  runtimeStatus,
+}: {
+  detail: string
+  error: string | null
+  hasLoadedModel: boolean
+  onDismissError: () => void
+  onInitModel: () => void
+  progress: number | null
+  progressMeta: string | null
+  runtimeStatus: RuntimeStatus
+}) {
+  if (error) {
+    return (
+      <div className="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm">
+        <Warning className="mt-0.5 shrink-0 text-destructive" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-foreground">Runtime issue</div>
+          <div className="mt-1 text-muted-foreground">{error}</div>
+        </div>
+        <Button size="sm" variant="outline" onClick={onDismissError}>
+          Dismiss
+        </Button>
+      </div>
+    )
+  }
+
+  if (runtimeStatus === "loading-model") {
+    return (
+      <div className="border border-white/10 bg-card px-3 py-3">
+        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+          <div className="flex min-w-0 items-center gap-2">
+            <Lightning className="shrink-0 text-primary" />
+            <span className="truncate text-foreground">{detail}</span>
+          </div>
+          <Badge variant="secondary">Loading</Badge>
+        </div>
+        <Progress value={progress ?? 8}>
+          <ProgressLabel>Bumblebee warmup</ProgressLabel>
+          <ProgressValue>
+            {() => (progress === null ? "Preparing" : `${progress}%`)}
+          </ProgressValue>
+        </Progress>
+        {progressMeta ? (
+          <div className="mt-2 text-xs text-muted-foreground">
+            {progressMeta}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (!hasLoadedModel) {
+    return (
+      <div className="flex items-center justify-between gap-3 border border-white/10 bg-card px-3 py-3 text-sm">
+        <div className="min-w-0">
+          <div className="text-foreground">Model not loaded yet</div>
+          <div className="text-muted-foreground">
+            First use downloads Bumblebee into browser cache.
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={onInitModel}>
+          <Cpu data-icon="inline-start" />
+          Load
+        </Button>
+      </div>
+    )
+  }
+
+  return null
 }
 
 export function App() {
@@ -117,7 +248,12 @@ export function App() {
   const retryLastTurn = useChatStore((state) => state.retryLastTurn)
   const clearChat = useChatStore((state) => state.clearChat)
   const dismissError = useChatStore((state) => state.dismissError)
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
+  const stickToBottomRef = useRef(true)
+  const previousMessageCountRef = useRef(0)
+  const previousLastMessageIdRef = useRef<string | null>(null)
+  const previousLastMessageLengthRef = useRef(0)
 
   const busy =
     runtimeStatus === "generating" || runtimeStatus === "loading-model"
@@ -125,7 +261,16 @@ export function App() {
     !busy &&
     messages.some((message) => message.role === "user") &&
     messages.at(-1)?.role !== "user"
-  const currentStatus = statusTone[runtimeStatus]
+  const canSend = composer.trim().length > 0 && !busy
+  const showHeaderChip = hasLoadedModel && !error
+  const headerChipLabel = [
+    CHAT_MODEL_CONFIG.label,
+    activeDevice?.toUpperCase(),
+    runtimeStatus === "generating" ? statusTone.generating.label : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+
   const progressMeta = useMemo(() => {
     if (!loadProgress) {
       return null
@@ -138,329 +283,180 @@ export function App() {
   }, [loadProgress])
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
+    const viewport = scrollViewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    const handleScroll = () => {
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      stickToBottomRef.current = distanceFromBottom < 48
+    }
+
+    handleScroll()
+    viewport.addEventListener("scroll", handleScroll)
+
+    return () => {
+      viewport.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
+
+  useEffect(() => {
+    const viewport = scrollViewportRef.current
+    const lastMessage = messages.at(-1)
+
+    if (!viewport) {
+      return
+    }
+
+    const isNewMessage =
+      previousMessageCountRef.current !== messages.length ||
+      previousLastMessageIdRef.current !== (lastMessage?.id ?? null)
+    const lastMessageLength = lastMessage?.content.length ?? 0
+    const isStreamingUpdate =
+      previousLastMessageLengthRef.current !== lastMessageLength
+
+    const rafId = window.requestAnimationFrame(() => {
+      if (stickToBottomRef.current && (isNewMessage || isStreamingUpdate)) {
+        viewport.scrollTo({
+          top: viewport.scrollHeight,
+          behavior: isNewMessage ? "smooth" : "auto",
+        })
+      }
+
+      previousMessageCountRef.current = messages.length
+      previousLastMessageIdRef.current = lastMessage?.id ?? null
+      previousLastMessageLengthRef.current = lastMessageLength
     })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
   }, [messages])
 
   return (
-    <div className="relative min-h-svh overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(167,217,178,0.4),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(88,113,92,0.18),transparent_24%),linear-gradient(180deg,rgba(255,252,246,0.98),rgba(246,241,233,0.94))]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-foreground/10" />
+    <div className="min-h-svh bg-background text-foreground">
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between gap-3 px-3 sm:px-4">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-foreground">
+              Bumblebee
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              On-device chat
+            </div>
+          </div>
 
-      <main className="relative mx-auto flex min-h-svh w-full max-w-6xl flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6 lg:grid lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,0.95fr)]">
-        <section className="flex min-w-0 flex-col gap-4">
-          <Card className="border border-foreground/10 bg-card/88 backdrop-blur">
-            <CardHeader className="border-b border-border/70">
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <Badge variant="outline">Ephemeral transcript</Badge>
-                    <Badge variant="outline">Client-only runtime</Badge>
-                    <Badge variant="secondary">
-                      {activeDevice === "webgpu"
-                        ? "WebGPU active"
-                        : "WASM baseline"}
-                    </Badge>
-                  </div>
-                  <CardTitle className="[font-family:var(--font-display)] text-3xl leading-none sm:text-4xl">
-                    Pocket Relay
-                  </CardTitle>
-                  <CardDescription className="mt-3 max-w-2xl text-xs/relaxed text-muted-foreground sm:text-sm/relaxed">
-                    {CHAT_COPY.subtitle}
-                  </CardDescription>
-                </div>
-                <Badge variant={currentStatus.variant}>
-                  {currentStatus.label}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-4 pt-4 md:grid-cols-[minmax(0,1.2fr)_minmax(13rem,0.8fr)]">
-              <div className="grid gap-3 text-xs/relaxed text-muted-foreground sm:text-sm/relaxed">
-                <p>
-                  A small browser model with no server memory. Refresh the page
-                  and the conversation is gone.
-                </p>
-                <p>{CHAT_COPY.warmup}</p>
-              </div>
-              <div className="grid gap-3 border border-border/70 bg-background/75 p-3">
-                <div className="flex items-center gap-2 text-xs tracking-[0.22em] text-muted-foreground uppercase">
-                  <Sparkle />
-                  Runtime profile
-                </div>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Model</span>
-                    <span className="font-medium">
-                      {CHAT_MODEL_CONFIG.label}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Quantization</span>
-                    <span className="font-medium uppercase">
-                      {CHAT_MODEL_CONFIG.dtype}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Memory</span>
-                    <span className="font-medium">Current tab only</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center gap-2">
+            {showHeaderChip ? (
+              <Badge
+                className="hidden border-primary/25 bg-primary/10 text-primary sm:inline-flex"
+                variant="outline"
+              >
+                {headerChipLabel}
+              </Badge>
+            ) : null}
+            <HeaderAction
+              disabled={!canRetry}
+              label="Retry last response"
+              onClick={retryLastTurn}
+            >
+              <ArrowClockwise />
+            </HeaderAction>
+            <HeaderAction
+              disabled={messages.length === 0}
+              label="Clear conversation"
+              onClick={clearChat}
+            >
+              <TrashSimple />
+            </HeaderAction>
+          </div>
+        </div>
+      </header>
 
-          <Card className="flex min-h-[28rem] flex-1 border border-foreground/10 bg-card/92 backdrop-blur">
-            <CardHeader className="border-b border-border/70">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Conversation</CardTitle>
-                  <CardDescription>
-                    Streaming responses from the browser worker.
-                  </CardDescription>
-                </div>
-                <CardAction className="flex items-center gap-2">
-                  <IconButton
-                    disabled={!canRetry}
-                    label="Retry the last assistant turn"
-                    onClick={retryLastTurn}
-                  >
-                    <ArrowClockwise />
-                  </IconButton>
-                  <IconButton
-                    disabled={messages.length === 0}
-                    label="Clear the current conversation"
-                    onClick={clearChat}
-                  >
-                    <TrashSimple />
-                  </IconButton>
-                </CardAction>
-              </div>
-            </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col pt-4">
-              <ScrollArea className="min-h-[19rem] flex-1 pr-2">
-                <div className="flex flex-col gap-4 pb-2">
-                  {messages.length === 0 ? (
-                    <div className="grid gap-5 border border-dashed border-border bg-background/70 p-4 sm:p-5">
-                      <div className="grid gap-2">
-                        <div className="flex items-center gap-2 text-xs tracking-[0.24em] text-muted-foreground uppercase">
-                          <Lightning />
-                          Quick start
-                        </div>
-                        <p className="max-w-xl text-sm/relaxed text-muted-foreground">
-                          Try a short prompt first. Smaller local models respond
-                          fastest when the request is direct and scoped.
-                        </p>
-                      </div>
-                      <div className="grid gap-2">
-                        {starterPrompts.map((prompt) => (
-                          <Button
-                            key={prompt}
-                            className="justify-start text-left"
-                            disabled={busy}
-                            variant="outline"
-                            onClick={() => sendMessage(prompt)}
-                          >
-                            <ArrowUpRight data-icon="inline-start" />
-                            <span className="truncate">{prompt}</span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
+      <main className="mx-auto flex min-h-svh w-full max-w-3xl flex-col px-3 pt-16 sm:px-4">
+        <div
+          ref={scrollViewportRef}
+          className="flex-1 overflow-y-auto overscroll-contain pb-[calc(11rem+env(safe-area-inset-bottom))]"
+        >
+          {messages.length === 0 ? (
+            <EmptyState busy={busy} onPrompt={sendMessage} />
+          ) : (
+            <div className="flex flex-col gap-3 py-4">
+              {messages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
+              <div ref={transcriptEndRef} />
+            </div>
+          )}
+        </div>
+      </main>
 
-                  {messages.map((message) => {
-                    const assistant = message.role === "assistant"
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
+          <ComposerStatus
+            detail={
+              pendingStop
+                ? "Stopping generation..."
+                : (loadProgress?.detail ?? "Ready to start a conversation.")
+            }
+            error={error}
+            hasLoadedModel={hasLoadedModel}
+            onDismissError={dismissError}
+            onInitModel={initModel}
+            progress={loadProgress?.progress ?? null}
+            progressMeta={progressMeta}
+            runtimeStatus={runtimeStatus}
+          />
 
-                    return (
-                      <article
-                        key={message.id}
-                        className={`grid gap-2 ${
-                          assistant
-                            ? "justify-items-start"
-                            : "justify-items-end"
-                        }`}
-                      >
-                        <div className="flex w-full items-center justify-between gap-3 px-1 text-[11px] tracking-[0.2em] text-muted-foreground uppercase">
-                          <span>{getMessageLabel(message)}</span>
-                          <span>{formatTimestamp(message.createdAt)}</span>
-                        </div>
-                        <div
-                          className={`max-w-[92%] border px-4 py-3 text-sm/relaxed whitespace-pre-wrap shadow-sm sm:max-w-[78%] ${
-                            assistant
-                              ? "border-border bg-background/90 text-foreground"
-                              : "border-foreground bg-foreground text-background"
-                          }`}
-                        >
-                          {message.content || (
-                            <span className="text-muted-foreground">
-                              {message.state === "error"
-                                ? "Response failed before tokens arrived."
-                                : " "}
-                            </span>
-                          )}
-                          {message.state === "streaming" ? (
-                            <span className="ml-1 inline-flex size-2 animate-pulse bg-primary align-middle" />
-                          ) : null}
-                        </div>
-                      </article>
-                    )
-                  })}
-
-                  <div ref={transcriptEndRef} />
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-foreground/10 bg-card/96 backdrop-blur">
-            <CardHeader className="border-b border-border/70">
-              <CardTitle className="text-base">Compose</CardTitle>
-              <CardDescription>
-                Press Enter to send. Use Shift+Enter for a new line.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="composer">Message</FieldLabel>
-                  <Textarea
-                    id="composer"
-                    className="min-h-28 resize-none bg-background/80"
-                    placeholder="Ask something compact. Short prompts keep local generation snappy on mobile."
-                    value={composer}
-                    onChange={(event) => setComposer(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" || event.shiftKey) {
-                        return
-                      }
-
-                      event.preventDefault()
-                      sendMessage()
-                    }}
-                  />
-                  <FieldDescription>
-                    {pendingStop
-                      ? "Stopping generation..."
-                      : hasLoadedModel
-                        ? "Model is warm. The transcript still disappears on refresh."
-                        : "Model is cold. First send will trigger the download."}
-                  </FieldDescription>
-                </Field>
-              </FieldGroup>
-
-              <Separator className="my-4" />
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    disabled={busy || composer.trim().length === 0}
-                    onClick={() => sendMessage()}
-                  >
-                    <PaperPlaneTilt data-icon="inline-start" />
-                    Send
-                  </Button>
-                  <Button
-                    disabled={runtimeStatus !== "generating"}
-                    variant="secondary"
-                    onClick={stopGeneration}
-                  >
-                    <Stop data-icon="inline-start" />
-                    Stop
-                  </Button>
-                  <Button disabled={busy} variant="outline" onClick={initModel}>
-                    <Cpu data-icon="inline-start" />
-                    {hasLoadedModel ? "Reload status" : "Load model"}
-                  </Button>
-                </div>
-                <div className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
-                  {CHAT_COPY.footnote}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <aside className="flex min-w-0 flex-col gap-4">
-          <Card className="border border-foreground/10 bg-card/90 backdrop-blur">
-            <CardHeader className="border-b border-border/70">
-              <CardTitle className="text-base">Model warmup</CardTitle>
-              <CardDescription>
-                Keep the loading cost explicit instead of hiding it behind the
-                first prompt.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 pt-4">
-              {loadProgress ? (
-                <Progress value={loadProgress.progress ?? 8}>
-                  <ProgressLabel>{loadProgress.phase}</ProgressLabel>
-                  <ProgressValue>
-                    {() =>
-                      loadProgress.progress === null
-                        ? "Preparing"
-                        : `${loadProgress.progress}%`
-                    }
-                  </ProgressValue>
-                </Progress>
-              ) : (
-                <div className="grid gap-2">
-                  <Skeleton className="h-3 w-28" />
-                  <Skeleton className="h-1.5 w-full" />
-                </div>
-              )}
-
-              <div className="grid gap-2 text-sm/relaxed text-muted-foreground">
-                <p>{loadProgress?.detail ?? CHAT_COPY.warmup}</p>
-                {loadProgress?.file ? (
-                  <p className="truncate text-xs tracking-[0.2em] uppercase">
-                    {loadProgress.file}
-                  </p>
-                ) : null}
-                {progressMeta ? (
-                  <p className="text-xs tracking-[0.2em] uppercase">
-                    {progressMeta}
-                  </p>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          {error ? (
-            <Alert variant="destructive">
-              <Warning />
-              <AlertTitle>Runtime issue</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-              <div className="mt-3">
-                <Button size="sm" variant="outline" onClick={dismissError}>
-                  Dismiss
-                </Button>
-              </div>
-            </Alert>
+          {showHeaderChip ? (
+            <Badge
+              className="w-fit border-primary/25 bg-primary/10 text-primary sm:hidden"
+              variant="outline"
+            >
+              {headerChipLabel}
+            </Badge>
           ) : null}
 
-          <Card className="border border-foreground/10 bg-card/84 backdrop-blur">
-            <CardHeader className="border-b border-border/70">
-              <CardTitle className="text-base">
-                What this app optimizes
-              </CardTitle>
-              <CardDescription>
-                V1 is intentionally narrow so the model feels stable on phones.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 pt-4 text-sm/relaxed text-muted-foreground">
-              <p>
-                Single thread, no history sidebar, no markdown renderer, and no
-                backend sync. Everything stays in the current tab.
-              </p>
-              <p>
-                The worker owns inference, the UI stays responsive, and the
-                browser cache can reuse model artifacts after refresh.
-              </p>
-            </CardContent>
-          </Card>
-        </aside>
-      </main>
+          <div className="border border-white/10 bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
+            <div className="flex items-end gap-2">
+              <Textarea
+                className="max-h-36 min-h-12 resize-none border-white/10 bg-transparent px-4 py-3 text-sm leading-6 focus-visible:ring-0"
+                placeholder="Message Bumblebee"
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || event.shiftKey) {
+                    return
+                  }
+
+                  event.preventDefault()
+                  sendMessage()
+                }}
+              />
+
+              <div className="flex shrink-0 items-center gap-2 pb-1">
+                <Button
+                  disabled={runtimeStatus !== "generating"}
+                  size="icon"
+                  variant="secondary"
+                  onClick={stopGeneration}
+                >
+                  <Stop />
+                </Button>
+                <Button
+                  disabled={!canSend}
+                  size="icon"
+                  onClick={() => sendMessage()}
+                >
+                  <PaperPlaneTilt />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
