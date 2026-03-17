@@ -4,6 +4,10 @@ Bumblebee is a fully client-side, on-device chat app built with React, Vite, and
 
 This project is primarily for educational and experimental purposes: a small reference app for exploring local-first browser AI, web workers, streaming UI, and lightweight in-browser inference.
 
+
+![bumblebee](https://github.com/user-attachments/assets/9025fcfa-2263-4091-8044-2c71a4e02260)
+
+
 Live demo: [bumblebee.joshxfi.com](https://bumblebee.joshxfi.com)
 
 ## What It Does
