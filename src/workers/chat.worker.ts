@@ -36,16 +36,32 @@ let activeRequestId: string | null = null
 let activeDevice: ChatDevice = "wasm"
 const interruptable = new InterruptableStoppingCriteria()
 
+type WebGpuNavigator = Navigator & {
+  gpu?: {
+    requestAdapter: () => Promise<unknown>
+  }
+}
+
 function postMessage(event: WorkerEvent) {
   self.postMessage(event)
 }
 
-function getDeviceCandidates(): Array<ChatDevice | null> {
-  if (typeof navigator !== "undefined" && "gpu" in navigator) {
-    return ["webgpu", null]
+async function getDeviceCandidates(): Promise<ChatDevice[]> {
+  const webGpuNavigator =
+    typeof navigator !== "undefined" ? (navigator as WebGpuNavigator) : null
+
+  if (webGpuNavigator?.gpu) {
+    try {
+      const adapter = await webGpuNavigator.gpu.requestAdapter()
+      if (adapter) {
+        return ["webgpu", "wasm"]
+      }
+    } catch {
+      // Ignore and fall through to WASM.
+    }
   }
 
-  return [null]
+  return ["wasm"]
 }
 
 function normalizeProgress(
@@ -93,13 +109,13 @@ async function loadGenerator(): Promise<Generator> {
     return loadPromise
   }
 
-  const candidates = getDeviceCandidates()
+  const candidates = await getDeviceCandidates()
 
   loadPromise = (async () => {
     let lastError: unknown = null
 
     for (const candidate of candidates) {
-      const deviceLabel = candidate ?? "wasm"
+      const deviceLabel = candidate
 
       try {
         postMessage({
@@ -115,7 +131,7 @@ async function loadGenerator(): Promise<Generator> {
         })
 
         const options: PretrainedModelOptions = {
-          device: candidate ?? undefined,
+          device: candidate,
           dtype: CHAT_MODEL_CONFIG.dtype,
           progress_callback: (payload: ProgressPayload) => {
             if (payload.status === "ready") {
@@ -141,7 +157,7 @@ async function loadGenerator(): Promise<Generator> {
         )
 
         generator = loaded
-        activeDevice = candidate ?? "wasm"
+        activeDevice = candidate
 
         postMessage({
           type: "ready",
