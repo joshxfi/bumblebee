@@ -25,6 +25,10 @@ export function ChatMessageBubble({
   onCopy,
 }: ChatMessageBubbleProps) {
   const assistant = message.role === "assistant"
+  const showPendingPlaceholder =
+    assistant &&
+    message.state === "streaming" &&
+    message.content.trim().length === 0
   const fallbackContent =
     message.content ||
     (message.state === "error" ? "Response failed before any text arrived." : "")
@@ -45,15 +49,32 @@ export function ChatMessageBubble({
               : "border-primary bg-primary text-primary-foreground"
           }`}
         >
-          <MarkdownMessage
-            className={`bumblebee-markdown ${
-              assistant
-                ? "text-foreground"
-                : "text-primary-foreground [--link-color:var(--primary-foreground)]"
-            }`}
-            content={fallbackContent}
-            streaming={message.state === "streaming"}
-          />
+          {showPendingPlaceholder ? (
+            <div className="bumblebee-waiting">
+              <span
+                aria-hidden="true"
+                className="bumblebee-waiting__bee"
+              >
+                🐝
+              </span>
+              <span className="bumblebee-waiting__label">Bumblebee is thinking</span>
+              <span aria-hidden="true" className="bumblebee-waiting__dots">
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
+          ) : (
+            <MarkdownMessage
+              className={`bumblebee-markdown ${
+                assistant
+                  ? "text-foreground"
+                  : "text-primary-foreground [--link-color:var(--primary-foreground)]"
+              }`}
+              content={fallbackContent}
+              streaming={message.state === "streaming"}
+            />
+          )}
         </div>
         <div
           className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-muted-foreground ${
