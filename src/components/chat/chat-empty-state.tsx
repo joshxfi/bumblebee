@@ -47,6 +47,18 @@ export function ChatEmptyState({
           </Button>
         ))}
       </div>
+
+      <div className="mt-4 max-w-xl">
+        <a
+          className="inline-flex items-center gap-2 border border-border bg-card px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          href="https://github.com/joshxfi/bumblebee"
+          rel="noreferrer noopener"
+          target="_blank"
+        >
+          <ArrowUpRightIcon />
+          <span>View the project on GitHub</span>
+        </a>
+      </div>
     </div>
   )
 }

@@ -4,7 +4,6 @@ export const starterPrompts = [
   "Tell me a short joke.",
   "Give me three weekend ideas.",
   "Help me write a friendly text reply.",
-  "Suggest a quick dinner idea.",
 ] as const
 
 export const statusTone: Record<
