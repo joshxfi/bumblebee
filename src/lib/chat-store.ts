@@ -18,6 +18,7 @@ import type {
   ChatModelId,
   ChatModelOption,
   DeviceProfile,
+  FinishReason,
   ModelLoadProgress,
   ModelMessage,
   RuntimeStatus,
@@ -39,6 +40,7 @@ type ChatStoreState = {
   runtimeStatus: RuntimeStatus
   selectedModelId: ChatModelId
   clearChat: () => void
+  continueLastResponse: () => void
   dismissError: () => void
   initModel: () => void
   retryLastTurn: () => void
@@ -51,6 +53,7 @@ type ChatStoreState = {
 type MutableChatState = Omit<
   ChatStoreState,
   | "clearChat"
+  | "continueLastResponse"
   | "dismissError"
   | "initModel"
   | "retryLastTurn"
@@ -85,6 +88,9 @@ function createChatMessage(
     state,
   }
 }
+
+const CONTINUE_PROMPT =
+  "Continue your last response from where it stopped. Do not repeat prior text."
 
 function createInitialLoadProgress(modelId: ChatModelId): ModelLoadProgress {
   return {
@@ -122,6 +128,7 @@ function finalizeAssistantMessage(
   messages: ChatMessage[],
   activeAssistantId: string | null,
   nextState: ChatMessageState,
+  finishReason?: FinishReason,
   dropIfEmpty = false
 ): ChatMessage[] {
   if (!activeAssistantId) {
@@ -137,8 +144,19 @@ function finalizeAssistantMessage(
       return []
     }
 
-    return [{ ...message, state: nextState }]
+    return [{ ...message, finishReason, state: nextState }]
   })
+}
+
+function markAssistantMessageStreaming(
+  messages: ChatMessage[],
+  assistantId: string
+): ChatMessage[] {
+  return messages.map((message) =>
+    message.id === assistantId
+      ? { ...message, finishReason: undefined, state: "streaming" as const }
+      : message
+  )
 }
 
 function pruneConversation(messages: ChatMessage[]) {
@@ -170,6 +188,13 @@ function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
 
 function getBusyStatus(hasLoadedModel: boolean): RuntimeStatus {
   return hasLoadedModel ? "generating" : "loading-model"
+}
+
+function getContinuableAssistantMessage(messages: ChatMessage[]) {
+  const lastMessage = messages.at(-1)
+  return lastMessage?.role === "assistant" && lastMessage.finishReason === "length"
+    ? lastMessage
+    : undefined
 }
 
 function createBaseState(
@@ -221,6 +246,44 @@ export function createChatStore(
         pendingStop: false,
         runtimeStatus: state.hasLoadedModel ? "ready" : "idle",
       }))
+    },
+    continueLastResponse: () => {
+      const state = get()
+      if (
+        state.runtimeStatus === "generating" ||
+        state.runtimeStatus === "loading-model"
+      ) {
+        return
+      }
+
+      const targetMessage = getContinuableAssistantMessage(state.messages)
+      if (!targetMessage) {
+        return
+      }
+
+      const visibleMessages = pruneConversation(state.messages)
+      const continuationHistory = [
+        ...toModelMessages(visibleMessages),
+        { role: "user", content: CONTINUE_PROMPT } satisfies ModelMessage,
+      ]
+
+      set({
+        activeAssistantId: targetMessage.id,
+        activeRequestId: targetMessage.id,
+        error: null,
+        messages: markAssistantMessageStreaming(
+          state.messages,
+          targetMessage.id
+        ),
+        pendingStop: false,
+        runtimeStatus: getBusyStatus(state.hasLoadedModel),
+      })
+
+      runtime.generate(
+        targetMessage.id,
+        state.selectedModelId,
+        continuationHistory
+      )
     },
     dismissError: () => {
       set((state) => ({
@@ -461,6 +524,7 @@ export function applyWorkerEvent(
             state.messages,
             state.activeAssistantId,
             "done",
+            event.finishReason,
             event.finishReason === "stopped"
           ),
           pendingStop: false,

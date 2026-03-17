@@ -87,6 +87,50 @@ describe("chat store", () => {
     expect(store.getState().hasLoadedModel).toBe(true)
     expect(assistant?.content).toContain("Local inference")
     expect(assistant?.state).toBe("done")
+    expect(assistant?.finishReason).toBe("completed")
+  })
+
+  it("marks responses that stop at the token limit and continues the same assistant turn", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().sendMessage("Write a longer answer.")
+    const requestId = store.getState().activeRequestId
+    const modelId = store.getState().selectedModelId
+
+    applyWorkerEvent(store, {
+      type: "token",
+      modelId,
+      requestId: requestId!,
+      text: "This answer is still going",
+    })
+    applyWorkerEvent(store, {
+      type: "complete",
+      modelId,
+      requestId: requestId!,
+      finishReason: "length",
+    })
+
+    const truncatedAssistant = store.getState().messages.at(-1)
+    expect(truncatedAssistant?.finishReason).toBe("length")
+    expect(truncatedAssistant?.state).toBe("done")
+
+    store.getState().continueLastResponse()
+
+    const continuedAssistant = store.getState().messages.at(-1)
+    expect(continuedAssistant?.id).toBe(truncatedAssistant?.id)
+    expect(continuedAssistant?.state).toBe("streaming")
+    expect(runtime.generate).toHaveBeenLastCalledWith(
+      truncatedAssistant?.id,
+      modelId,
+      expect.arrayContaining([
+        {
+          role: "user",
+          content:
+            "Continue your last response from where it stopped. Do not repeat prior text.",
+        },
+      ])
+    )
   })
 
   it("resets state and recreates the worker when switching models", () => {

@@ -16,7 +16,7 @@ const desktopModel: ChatModelConfig = {
   dtype: "q4",
   generation: {
     do_sample: true,
-    max_new_tokens: 88,
+    max_new_tokens: 192,
     repetition_penalty: 1.08,
     return_full_text: false,
     temperature: 0.72,
@@ -35,7 +35,7 @@ const mobileModel: ChatModelConfig = {
   dtype: "q4",
   generation: {
     do_sample: true,
-    max_new_tokens: 64,
+    max_new_tokens: 128,
     repetition_penalty: 1.05,
     return_full_text: false,
     temperature: 0.7,

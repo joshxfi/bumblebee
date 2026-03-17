@@ -4,6 +4,7 @@ export type ChatRole = "user" | "assistant" | "system"
 export type ChatMessageState = "streaming" | "done" | "error"
 export type ChatModelId = "lfm2-350m" | "smollm2-135m"
 export type DeviceProfile = "constrained" | "standard"
+export type FinishReason = "completed" | "length" | "stopped"
 export type RuntimeStatus =
   | "idle"
   | "loading-model"
@@ -11,7 +12,6 @@ export type RuntimeStatus =
   | "generating"
   | "error"
 export type ChatDevice = "webgpu" | "wasm"
-export type FinishReason = "completed" | "stopped"
 
 export type ChatModelConfig = {
   description: string
@@ -45,6 +45,7 @@ export type ChatMessage = {
   role: ChatRole
   content: string
   createdAt: number
+  finishReason?: FinishReason
   state: ChatMessageState
 }
 

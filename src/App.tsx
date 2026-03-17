@@ -28,6 +28,9 @@ export function App() {
   const deviceProfile = useChatStore((state) => state.deviceProfile)
   const setComposer = useChatStore((state) => state.setComposer)
   const sendMessage = useChatStore((state) => state.sendMessage)
+  const continueLastResponse = useChatStore(
+    (state) => state.continueLastResponse
+  )
   const initModel = useChatStore((state) => state.initModel)
   const stopGeneration = useChatStore((state) => state.stopGeneration)
   const retryLastTurn = useChatStore((state) => state.retryLastTurn)
@@ -59,6 +62,11 @@ export function App() {
   const showComposerStatus =
     Boolean(error) || runtimeStatus === "loading-model" || !hasLoadedModel
   const shouldShowScrollToBottom = showScrollToBottom && !isNearBottom
+  const continuableMessageId =
+    messages.at(-1)?.role === "assistant" &&
+    messages.at(-1)?.finishReason === "length"
+      ? messages.at(-1)?.id ?? null
+      : null
   const headerChipLabel = [
     selectedModel.shortLabel,
     activeDevice?.toUpperCase(),
@@ -221,6 +229,11 @@ export function App() {
             <div className="flex flex-col gap-3 py-4">
               {messages.map((message) => (
                 <ChatMessageBubble
+                  canContinue={
+                    !busy &&
+                    continuableMessageId === message.id &&
+                    message.content.trim().length > 0
+                  }
                   key={message.id}
                   copyState={
                     copiedMessageState?.messageId === message.id
@@ -228,6 +241,7 @@ export function App() {
                       : null
                   }
                   message={message}
+                  onContinue={continueLastResponse}
                   onCopy={handleCopyMessage}
                 />
               ))}

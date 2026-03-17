@@ -210,6 +210,7 @@ async function runGeneration(
 
     const stoppingCriteria = new StoppingCriteriaList()
     stoppingCriteria.push(interruptable)
+    let generatedTokenCount = 0
 
     const streamer = new TextStreamer(activeGenerator.tokenizer, {
       callback_function: (text) => {
@@ -220,6 +221,9 @@ async function runGeneration(
         postMessage({ type: "token", modelId, requestId, text })
       },
       skip_prompt: true,
+      token_callback_function: (tokens) => {
+        generatedTokenCount += tokens.length
+      },
     })
 
     await activeGenerator(messages, {
@@ -234,7 +238,11 @@ async function runGeneration(
       type: "complete",
       modelId,
       requestId,
-      finishReason: interruptable.interrupted ? "stopped" : "completed",
+      finishReason: interruptable.interrupted
+        ? "stopped"
+        : generatedTokenCount >= model.generation.max_new_tokens
+          ? "length"
+          : "completed",
     })
   } catch (error) {
     postMessage({
