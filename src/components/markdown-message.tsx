@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef } from "react"
+import "streamdown/styles.css"
 import {
   Streamdown,
   defaultUrlTransform,
