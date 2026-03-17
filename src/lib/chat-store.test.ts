@@ -148,7 +148,7 @@ describe("chat store", () => {
     expect(store.getState().hasLoadedModel).toBe(false)
   })
 
-  it("defaults constrained devices to the smaller model and rejects the desktop model", () => {
+  it("defaults constrained devices to the smaller model but still allows the desktop model", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime, { deviceProfile: "constrained" })
 
@@ -156,12 +156,12 @@ describe("chat store", () => {
     expect(
       store.getState().availableModels.find((model) => model.id === "lfm2-350m")
         ?.disabled
-    ).toBe(true)
+    ).toBe(false)
 
     store.getState().setSelectedModel("lfm2-350m")
 
-    expect(store.getState().selectedModelId).toBe("smollm2-135m")
-    expect(runtime.recreateWorker).not.toHaveBeenCalled()
+    expect(store.getState().selectedModelId).toBe("lfm2-350m")
+    expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
   })
 
   it("ignores stale worker events from a previous model", () => {

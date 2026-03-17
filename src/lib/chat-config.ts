@@ -12,7 +12,7 @@ type NavigatorWithDeviceMemory = Navigator & {
 const desktopModel: ChatModelConfig = {
   description: "Desktop recommended for longer, richer replies.",
   deviceLabel: "Desktop recommended",
-  disabledOnConstrained: true,
+  disabledOnConstrained: false,
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -102,12 +102,14 @@ export function getDeviceProfile(
 
   const isIosDevice = /iPhone|iPad|iPod/i.test(userAgent)
   const isTouchMac = platform === "MacIntel" && maxTouchPoints > 1
+  const isMobileDevice =
+    /Android|webOS|BlackBerry|Opera Mini|IEMobile|Mobile/i.test(userAgent) ||
+    isIosDevice ||
+    isTouchMac
   const isLowMemoryDevice =
     typeof deviceMemory === "number" && deviceMemory <= 4
 
-  return isIosDevice || isTouchMac || isLowMemoryDevice
-    ? "constrained"
-    : "standard"
+  return isMobileDevice || isLowMemoryDevice ? "constrained" : "standard"
 }
 
 export function formatBytes(value?: number) {
