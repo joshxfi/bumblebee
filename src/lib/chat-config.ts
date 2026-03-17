@@ -29,7 +29,7 @@ const desktopModel: ChatModelConfig = {
 }
 
 const mobileModel: ChatModelConfig = {
-  description: "Smaller on-device model chosen for iPhone and low-memory devices.",
+  description: "Smaller on-device model chosen for mobile and low-memory devices.",
   deviceLabel: "Mobile safe",
   disabledOnConstrained: false,
   dtype: "q4",
@@ -60,7 +60,7 @@ export const CHAT_COPY = {
   warmup:
     "First run downloads the tokenizer and weights from Hugging Face, then the browser cache handles repeat visits.",
   footnote:
-    "Bumblebee uses a lighter model on iPhone and other constrained devices to reduce browser crashes.",
+    "Bumblebee uses a lighter model on mobile and other constrained devices to reduce browser crashes.",
 } as const
 
 export function getModelConfig(modelId: ChatModelId) {

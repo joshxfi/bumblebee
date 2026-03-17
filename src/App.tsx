@@ -1,337 +1,18 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react"
-import {
-  ArrowClockwise,
-  ArrowDown,
-  ArrowUpRight,
-  Check,
-  CopySimple,
-  Cpu,
-  Lightning,
-  PaperPlaneTilt,
-  Stop,
-  TrashSimple,
-  Warning,
-} from "@phosphor-icons/react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
 
-import { MarkdownMessage } from "@/components/markdown-message"
+import { ChatComposerStatus } from "@/components/chat/chat-composer-status"
+import { ChatEmptyState } from "@/components/chat/chat-empty-state"
+import { ChatHeader } from "@/components/chat/chat-header"
+import { ChatMessageBubble } from "@/components/chat/chat-message-bubble"
+import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button"
+import { copyToClipboard, statusTone } from "@/components/chat/chat-ui"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValue,
-} from "@/components/ui/progress"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { formatBytes, getModelConfig } from "@/lib/chat-config"
 import { useChatStore } from "@/lib/chat-store"
-import type { ChatMessage, ChatModelId, RuntimeStatus } from "@/lib/chat-types"
-
-const starterPrompts = [
-  "Tell me a short joke.",
-  "Give me three weekend ideas.",
-  "Help me write a friendly text reply.",
-  "Suggest a quick dinner idea.",
-]
-
-const statusTone: Record<
-  RuntimeStatus,
-  {
-    label: string
-    variant: "default" | "secondary" | "outline" | "destructive"
-  }
-> = {
-  idle: { label: "Cold", variant: "outline" },
-  "loading-model": { label: "Loading", variant: "secondary" },
-  ready: { label: "Ready", variant: "default" },
-  generating: { label: "Typing", variant: "secondary" },
-  error: { label: "Error", variant: "destructive" },
-}
-
-async function copyToClipboard(value: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value)
-    return
-  }
-
-  const textarea = document.createElement("textarea")
-  textarea.value = value
-  textarea.setAttribute("readonly", "")
-  textarea.style.position = "absolute"
-  textarea.style.left = "-9999px"
-  document.body.appendChild(textarea)
-  textarea.select()
-
-  const copied = document.execCommand("copy")
-  document.body.removeChild(textarea)
-
-  if (!copied) {
-    throw new Error("Copy failed.")
-  }
-}
-
-function HeaderAction({
-  label,
-  ...props
-}: ComponentProps<typeof Button> & { label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            aria-label={label}
-            className="border-border bg-card text-foreground hover:bg-accent"
-            size="icon-sm"
-            variant="outline"
-            {...props}
-          />
-        }
-      />
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function formatTimestamp(value: number) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(value)
-}
-
-function EmptyState({
-  busy,
-  currentModelLabel,
-  onPrompt,
-}: {
-  busy: boolean
-  currentModelLabel: string
-  onPrompt: (prompt: string) => void
-}) {
-  return (
-    <div className="flex min-h-full flex-col justify-center px-4 py-12">
-      <div className="max-w-md space-y-3">
-        <Badge
-          className="border-primary/25 bg-primary/10 text-primary"
-          variant="outline"
-        >
-          {currentModelLabel} · On-device
-        </Badge>
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">
-          Start chatting with Bumblebee
-        </h1>
-        <p className="text-sm/6 text-muted-foreground">
-          Everything stays in this tab. Pick a starter or type your own
-          message.
-        </p>
-      </div>
-
-      <div className="mt-8 flex max-w-xl flex-col gap-2">
-        {starterPrompts.map((prompt) => (
-          <Button
-            key={prompt}
-            className="justify-start border-border bg-card px-4 py-5 text-left text-foreground hover:bg-accent"
-            disabled={busy}
-            variant="outline"
-            onClick={() => onPrompt(prompt)}
-          >
-            <ArrowUpRight data-icon="inline-start" />
-            <span className="truncate">{prompt}</span>
-          </Button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function MessageBubble({
-  copyState,
-  message,
-  onCopy,
-}: {
-  copyState: "copied" | "error" | null
-  message: ChatMessage
-  onCopy: (message: ChatMessage) => void
-}) {
-  const assistant = message.role === "assistant"
-  const fallbackContent =
-    message.content ||
-    (message.state === "error" ? "Response failed before any text arrived." : "")
-  const canCopy = assistant && message.content.trim().length > 0
-
-  return (
-    <article
-      className={`flex flex-col gap-1 ${
-        assistant ? "items-start" : "items-end"
-      }`}
-    >
-      <div
-        className={`max-w-[88%] border px-4 py-3 text-sm/6 shadow-[0_6px_18px_rgba(0,0,0,0.16)] sm:max-w-[72%] ${
-          assistant
-            ? "border-border bg-card text-foreground"
-            : "border-primary bg-primary text-primary-foreground"
-        }`}
-      >
-        <MarkdownMessage
-          className={`bumblebee-markdown ${
-            assistant
-              ? "text-foreground"
-              : "text-primary-foreground [--link-color:var(--primary-foreground)]"
-          }`}
-          content={fallbackContent}
-          streaming={message.state === "streaming"}
-        />
-        {message.state === "streaming" ? (
-          <span className="mt-2 inline-flex size-2 animate-pulse bg-current align-middle opacity-80" />
-        ) : null}
-      </div>
-      <div
-        className={`flex w-full items-center gap-2 px-1 text-[11px] text-muted-foreground ${
-          assistant ? "justify-between" : "justify-end"
-        }`}
-      >
-        <span>
-          {assistant ? "Bumblebee" : "You"} · {formatTimestamp(message.createdAt)}
-        </span>
-        {canCopy ? (
-          <div className="flex items-center gap-2">
-            {copyState ? (
-              <span
-                className={
-                  copyState === "error" ? "text-destructive" : "text-primary"
-                }
-              >
-                {copyState === "copied" ? "Copied" : "Copy failed"}
-              </span>
-            ) : null}
-            <Button
-              aria-label="Copy response"
-              className="px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-              size="xs"
-              variant="ghost"
-              onClick={() => onCopy(message)}
-            >
-              {copyState === "copied" ? <Check /> : <CopySimple />}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-    </article>
-  )
-}
-
-function ComposerStatus({
-  detail,
-  deviceProfile,
-  error,
-  hasLoadedModel,
-  modelLabel,
-  onDismissError,
-  onInitModel,
-  progress,
-  progressMeta,
-  runtimeStatus,
-}: {
-  detail: string
-  deviceProfile: "constrained" | "standard"
-  error: string | null
-  hasLoadedModel: boolean
-  modelLabel: string
-  onDismissError: () => void
-  onInitModel: () => void
-  progress: number | null
-  progressMeta: string | null
-  runtimeStatus: RuntimeStatus
-}) {
-  if (error) {
-    return (
-      <div className="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm">
-        <Warning className="mt-0.5 shrink-0 text-destructive" />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium text-foreground">Runtime issue</div>
-          <div className="mt-1 text-muted-foreground">{error}</div>
-          {deviceProfile === "constrained" && !hasLoadedModel ? (
-            <div className="mt-1 text-muted-foreground">
-              This device is using the lighter model for stability. If the tab
-              reloads again, close other apps or tabs and retry.
-            </div>
-          ) : null}
-        </div>
-        <Button size="sm" variant="outline" onClick={onDismissError}>
-          Dismiss
-        </Button>
-      </div>
-    )
-  }
-
-  if (runtimeStatus === "loading-model") {
-    return (
-      <div className="border border-border bg-card px-3 py-3">
-        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-          <div className="flex min-w-0 items-center gap-2">
-            <Lightning className="shrink-0 text-primary" />
-            <span className="truncate text-foreground">{detail}</span>
-          </div>
-          <Badge variant="secondary">Loading</Badge>
-        </div>
-        <Progress value={progress ?? 8}>
-          <ProgressLabel>{modelLabel} warmup</ProgressLabel>
-          <ProgressValue>
-            {() => (progress === null ? "Preparing" : `${progress}%`)}
-          </ProgressValue>
-        </Progress>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {progressMeta ? <span>{progressMeta}</span> : null}
-          {deviceProfile === "constrained" ? (
-            <span>Mobile-safe model selected for this device.</span>
-          ) : null}
-        </div>
-      </div>
-    )
-  }
-
-  if (!hasLoadedModel) {
-    return (
-      <div className="flex items-center justify-between gap-3 border border-border bg-card px-3 py-3 text-sm">
-        <div className="min-w-0">
-          <div className="text-foreground">{modelLabel} is not loaded yet</div>
-          <div className="text-muted-foreground">
-            First use downloads this model into browser cache.
-          </div>
-          {deviceProfile === "constrained" ? (
-            <div className="mt-1 text-xs text-muted-foreground">
-              Bumblebee picked the lighter model for this device to reduce
-              Safari crashes.
-            </div>
-          ) : null}
-        </div>
-        <Button size="sm" variant="outline" onClick={onInitModel}>
-          <Cpu data-icon="inline-start" />
-          Load
-        </Button>
-      </div>
-    )
-  }
-
-  return null
-}
+import type { ChatMessage } from "@/lib/chat-types"
 
 export function App() {
   const messages = useChatStore((state) => state.messages)
@@ -396,6 +77,10 @@ export function App() {
 
     return loaded && total ? `${loaded} / ${total}` : null
   }, [loadProgress])
+
+  const scrollButtonOffsetClassName = showComposerStatus
+    ? "bottom-[calc(11rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9.5rem+env(safe-area-inset-bottom))]"
+    : "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
 
   useEffect(() => {
     return () => {
@@ -510,81 +195,18 @@ export function App() {
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between gap-2 px-3 sm:px-4">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-foreground">
-              Bumblebee
-            </div>
-            <div className="truncate text-xs text-muted-foreground">
-              On-device chat
-            </div>
-          </div>
-
-          <div className="flex min-w-0 items-center gap-2">
-            <Select
-              value={selectedModelId}
-              onValueChange={(value) =>
-                setSelectedModel(value as ChatModelId)
-              }
-            >
-              <SelectTrigger
-                aria-label="Select model"
-                className="w-[8.75rem] border-border bg-card text-foreground hover:bg-accent sm:w-[11rem]"
-                size="sm"
-              >
-                <span className="truncate">{selectedModel.label}</span>
-              </SelectTrigger>
-              <SelectContent align="end" className="min-w-64 sm:min-w-72">
-                <SelectGroup>
-                  {availableModels.map((model) => (
-                    <SelectItem
-                      key={model.id}
-                      className="items-start py-2.5"
-                      disabled={model.disabled}
-                      value={model.id}
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 whitespace-normal">
-                        <span className="leading-4 font-medium text-foreground">
-                          {model.label}
-                        </span>
-                        <span className="text-[11px] leading-4 text-muted-foreground">
-                          {model.disabled
-                            ? "Desktop recommended"
-                            : model.description}
-                        </span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            {showHeaderChip ? (
-              <Badge
-                className="hidden shrink-0 border-primary/25 bg-primary/10 text-primary sm:inline-flex"
-                variant="outline"
-              >
-                {headerChipLabel}
-              </Badge>
-            ) : null}
-            <HeaderAction
-              disabled={!canRetry}
-              label="Retry last response"
-              onClick={retryLastTurn}
-            >
-              <ArrowClockwise />
-            </HeaderAction>
-            <HeaderAction
-              disabled={messages.length === 0}
-              label="Clear conversation"
-              onClick={clearChat}
-            >
-              <TrashSimple />
-            </HeaderAction>
-          </div>
-        </div>
-      </header>
+      <ChatHeader
+        availableModels={availableModels}
+        canRetry={canRetry}
+        headerChipLabel={headerChipLabel}
+        messagesCount={messages.length}
+        onClear={clearChat}
+        onRetry={retryLastTurn}
+        onSelectModel={setSelectedModel}
+        selectedModelId={selectedModelId}
+        selectedModelLabel={selectedModel.label}
+        showHeaderChip={showHeaderChip}
+      />
 
       <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pt-16 sm:px-4">
         <div
@@ -592,7 +214,7 @@ export function App() {
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(12rem+env(safe-area-inset-bottom))]"
         >
           {messages.length === 0 ? (
-            <EmptyState
+            <ChatEmptyState
               busy={busy}
               currentModelLabel={selectedModel.label}
               onPrompt={sendMessage}
@@ -600,7 +222,7 @@ export function App() {
           ) : (
             <div className="flex flex-col gap-3 py-4">
               {messages.map((message) => (
-                <MessageBubble
+                <ChatMessageBubble
                   key={message.id}
                   copyState={
                     copiedMessageState?.messageId === message.id
@@ -616,31 +238,15 @@ export function App() {
         </div>
       </main>
 
-      {shouldShowScrollToBottom ? (
-        <div
-          className={`pointer-events-none fixed inset-x-0 z-20 ${
-            showComposerStatus
-              ? "bottom-[calc(11rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9.5rem+env(safe-area-inset-bottom))]"
-              : "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
-          }`}
-        >
-          <div className="mx-auto flex w-full max-w-3xl justify-end px-3 sm:px-4">
-            <Button
-              aria-label="Scroll to latest messages"
-              className="pointer-events-auto border border-border shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
-              size="icon-sm"
-              variant="secondary"
-              onClick={() => scrollToBottom()}
-            >
-              <ArrowDown />
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <ScrollToBottomButton
+        offsetClassName={scrollButtonOffsetClassName}
+        visible={shouldShowScrollToBottom}
+        onScrollToBottom={() => scrollToBottom()}
+      />
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
-          <ComposerStatus
+          <ChatComposerStatus
             detail={
               pendingStop
                 ? "Stopping generation..."
@@ -691,14 +297,14 @@ export function App() {
                   variant="secondary"
                   onClick={stopGeneration}
                 >
-                  <Stop />
+                  <StopIcon />
                 </Button>
                 <Button
                   disabled={!canSend}
                   size="icon"
                   onClick={() => sendMessage()}
                 >
-                  <PaperPlaneTilt />
+                  <PaperPlaneTiltIcon />
                 </Button>
               </div>
             </div>
