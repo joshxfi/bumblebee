@@ -153,15 +153,39 @@ describe("chat store", () => {
     const store = createChatStore(runtime, { deviceProfile: "constrained" })
 
     expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(store.getState().availableModels.map((model) => model.id)).toEqual([
+      "smollm2-135m",
+      "smollm2-360m",
+      "lfm2-350m",
+      "qwen2.5-0.5b",
+      "lfm2-700m",
+    ])
     expect(
       store.getState().availableModels.find((model) => model.id === "lfm2-350m")
         ?.disabled
     ).toBe(false)
-
+    expect(
+      store.getState().availableModels.find((model) => model.id === "lfm2-700m")
+        ?.disabled
+    ).toBe(true)
     store.getState().setSelectedModel("lfm2-350m")
 
     expect(store.getState().selectedModelId).toBe("lfm2-350m")
     expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the balanced desktop default while exposing the full model ladder", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime, { deviceProfile: "standard" })
+
+    expect(store.getState().selectedModelId).toBe("lfm2-350m")
+    expect(store.getState().availableModels.map((model) => model.label)).toEqual([
+      "SmolLM2 135M",
+      "SmolLM2 360M",
+      "LFM2 350M",
+      "Qwen2.5 0.5B",
+      "LFM2 700M",
+    ])
   })
 
   it("ignores stale worker events from a previous model", () => {

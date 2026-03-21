@@ -2,7 +2,13 @@ import type { Message } from "@huggingface/transformers"
 
 export type ChatRole = "user" | "assistant" | "system"
 export type ChatMessageState = "streaming" | "done" | "error"
-export type ChatModelId = "lfm2-350m" | "smollm2-135m"
+export type ChatModelDtype = "q4" | "q4f16"
+export type ChatModelId =
+  | "lfm2-350m"
+  | "lfm2-700m"
+  | "qwen2.5-0.5b"
+  | "smollm2-135m"
+  | "smollm2-360m"
 export type DeviceProfile = "constrained" | "standard"
 export type FinishReason = "completed" | "length" | "stopped"
 export type RuntimeStatus =
@@ -15,9 +21,7 @@ export type ChatDevice = "webgpu" | "wasm"
 
 export type ChatModelConfig = {
   description: string
-  deviceLabel: string
-  disabledOnConstrained: boolean
-  dtype: "q4"
+  dtype: ChatModelDtype
   generation: {
     do_sample: boolean
     max_new_tokens: number
@@ -30,6 +34,8 @@ export type ChatModelConfig = {
   label: string
   modelId: string
   shortLabel: string
+  supportsDesktop: boolean
+  supportsMobile: boolean
 }
 
 export type ChatModelOption = {
@@ -38,6 +44,8 @@ export type ChatModelOption = {
   id: ChatModelId
   label: string
   shortLabel: string
+  supportsDesktop: boolean
+  supportsMobile: boolean
 }
 
 export type ChatMessage = {
