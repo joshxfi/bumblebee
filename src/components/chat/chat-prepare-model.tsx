@@ -59,7 +59,7 @@ export function ChatPrepareModel({
       <div className="border border-primary/25 bg-primary/6 px-3 py-3 text-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-medium text-foreground">Preparing {modelLabel}</div>
+            <div className="font-medium text-foreground">Preparing model</div>
             <p className="mt-1 text-muted-foreground">{detail}</p>
           </div>
           <div className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-primary">
@@ -68,7 +68,7 @@ export function ChatPrepareModel({
         </div>
         <div className="mt-3">
           <Progress value={progress ?? 8}>
-            <ProgressLabel>{modelLabel} warmup</ProgressLabel>
+            <ProgressLabel>Warmup</ProgressLabel>
           </Progress>
         </div>
         {progressMeta ? (
