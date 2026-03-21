@@ -34,6 +34,10 @@ export function ChatMessageBubble({
     (message.state === "error" ? "Response failed before any text arrived." : "")
   const canCopy = assistant && message.content.trim().length > 0
   const hitLengthLimit = assistant && message.finishReason === "length"
+  const renderPlainStreaming =
+    assistant &&
+    message.state === "streaming" &&
+    message.content.trim().length > 0
 
   return (
     <article
@@ -63,6 +67,10 @@ export function ChatMessageBubble({
                 <span />
                 <span />
               </span>
+            </div>
+          ) : renderPlainStreaming ? (
+            <div className="whitespace-pre-wrap break-words text-sm/6 text-foreground">
+              {fallbackContent}
             </div>
           ) : (
             <MarkdownMessage

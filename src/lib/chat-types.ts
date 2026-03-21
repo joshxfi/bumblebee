@@ -31,6 +31,7 @@ export type ChatModelConfig = {
     temperature: number
     top_p: number
   }
+  historyTurns: number
   id: ChatModelId
   label: string
   modelId: string
@@ -69,6 +70,20 @@ export type ModelLoadProgress = {
   total?: number
 }
 
+export type ChatPerfSample = {
+  completionMs?: number
+  device?: ChatDevice
+  firstTokenMs?: number
+  generatedTokens?: number
+  historyTurnCount?: number
+  kind: "generation" | "load"
+  messageChars?: number
+  modelLoadMs?: number
+  selectedModelId: ChatModelId
+  timestamp: number
+  tokensPerSec?: number
+}
+
 export type WorkerRequest =
   | { type: "init"; modelId: ChatModelId }
   | {
@@ -91,6 +106,7 @@ export type WorkerEvent =
   | { type: "token"; modelId: ChatModelId; requestId: string; text: string }
   | {
       type: "complete"
+      generatedTokens: number
       modelId: ChatModelId
       requestId: string
       finishReason: FinishReason

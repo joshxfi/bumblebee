@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
 
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageBubble } from "@/components/chat/chat-message-bubble"
+import { ChatPerfOverlay } from "@/components/chat/chat-perf-overlay"
 import { ChatPrepareModel } from "@/components/chat/chat-prepare-model"
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button"
 import { copyToClipboard } from "@/components/chat/chat-ui"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { formatBytes, getModelConfig } from "@/lib/chat-config"
+import {
+  getLatestChatPerfSample,
+  subscribeChatPerf,
+} from "@/lib/chat-runtime"
 import { useChatStore } from "@/lib/chat-store"
 import type { ChatMessage } from "@/lib/chat-types"
 
@@ -46,6 +52,11 @@ export function ChatApp() {
   } | null>(null)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const perfSample = useSyncExternalStore(
+    subscribeChatPerf,
+    getLatestChatPerfSample,
+    () => null
+  )
 
   const selectedModel = getModelConfig(selectedModelId)
   const busy =
@@ -62,6 +73,7 @@ export function ChatApp() {
       ? messages.at(-1)?.id ?? null
       : null
   const showPrepareModel = !hasLoadedModel
+  const shouldVirtualize = messages.length > 80
   const mascotTone = error
     ? "error"
     : runtimeStatus === "loading-model"
@@ -83,6 +95,17 @@ export function ChatApp() {
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
     : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const rowVirtualizer = useVirtualizer({
+    count: shouldVirtualize ? messages.length : 0,
+    estimateSize: () => 156,
+    gap: 12,
+    getScrollElement: () => scrollViewportRef.current,
+    overscan: 6,
+    paddingEnd: 16,
+    paddingStart: 16,
+  })
+  const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : []
 
   useEffect(() => {
     return () => {
@@ -109,12 +132,20 @@ export function ChatApp() {
     }
 
     updateScrollState()
-    viewport.addEventListener("scroll", updateScrollState)
+    viewport.addEventListener("scroll", updateScrollState, { passive: true })
 
     return () => {
       viewport.removeEventListener("scroll", updateScrollState)
     }
   }, [messages.length])
+
+  useEffect(() => {
+    if (!shouldVirtualize) {
+      return
+    }
+
+    rowVirtualizer.measure()
+  }, [messages, rowVirtualizer, shouldVirtualize])
 
   useEffect(() => {
     const viewport = scrollViewportRef.current
@@ -197,6 +228,7 @@ export function ChatApp() {
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
+      {import.meta.env.DEV ? <ChatPerfOverlay sample={perfSample} /> : null}
       <ChatHeader
         availableModels={availableModels}
         canRetry={canRetry}
@@ -224,6 +256,50 @@ export function ChatApp() {
               currentModelLabel={selectedModel.label}
               onPrompt={sendMessage}
             />
+          ) : shouldVirtualize ? (
+            <div
+              className="relative"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {virtualRows.map((virtualRow) => {
+                const message = messages[virtualRow.index]
+                if (!message) {
+                  return null
+                }
+
+                return (
+                  <div
+                    data-index={virtualRow.index}
+                    key={message.id}
+                    ref={(node) => {
+                      if (node) {
+                        rowVirtualizer.measureElement(node)
+                      }
+                    }}
+                    className="absolute top-0 left-0 w-full"
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <ChatMessageBubble
+                      canContinue={
+                        !busy &&
+                        continuableMessageId === message.id &&
+                        message.content.trim().length > 0
+                      }
+                      copyState={
+                        copiedMessageState?.messageId === message.id
+                          ? copiedMessageState.status
+                          : null
+                      }
+                      message={message}
+                      onContinue={continueLastResponse}
+                      onCopy={handleCopyMessage}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           ) : (
             <div className="flex flex-col gap-3 py-4">
               {messages.map((message) => (

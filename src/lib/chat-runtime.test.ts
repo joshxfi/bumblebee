@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { ChatRuntimeClient } from "@/lib/chat-runtime"
+import {
+  ChatRuntimeClient,
+  getLatestChatPerfSample,
+  subscribeChatPerf,
+} from "@/lib/chat-runtime"
 import type { WorkerEvent, WorkerRequest } from "@/lib/chat-types"
 
 class WorkerDouble extends EventTarget {
@@ -85,6 +89,50 @@ describe("chat runtime", () => {
       { type: "init", modelId: "smollm2-135m" },
     ])
 
+    runtime.dispose()
+  })
+
+  it("captures perf samples for model load and generation", () => {
+    const worker = new WorkerDouble()
+    const runtime = new ChatRuntimeClient(() => worker as unknown as Worker)
+    const perfListener = vi.fn()
+    const unsubscribePerf = subscribeChatPerf(perfListener)
+
+    runtime.init("lfm2-350m")
+    worker.emitWorkerEvent({
+      type: "ready",
+      modelId: "lfm2-350m",
+      device: "wasm",
+      dtype: "q4",
+    })
+
+    runtime.generate("request-1", "lfm2-350m", [
+      { role: "user", content: "hello" },
+    ])
+    worker.emitWorkerEvent({
+      type: "token",
+      modelId: "lfm2-350m",
+      requestId: "request-1",
+      text: "world",
+    })
+    worker.emitWorkerEvent({
+      type: "complete",
+      generatedTokens: 5,
+      modelId: "lfm2-350m",
+      requestId: "request-1",
+      finishReason: "completed",
+    })
+
+    expect(perfListener).toHaveBeenCalled()
+    expect(getLatestChatPerfSample()).toMatchObject({
+      generatedTokens: 5,
+      historyTurnCount: 1,
+      kind: "generation",
+      messageChars: 5,
+      selectedModelId: "lfm2-350m",
+    })
+
+    unsubscribePerf()
     runtime.dispose()
   })
 })

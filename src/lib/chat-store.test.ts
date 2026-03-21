@@ -76,6 +76,7 @@ describe("chat store", () => {
     })
     applyWorkerEvent(store, {
       type: "complete",
+      generatedTokens: 12,
       modelId,
       requestId: requestId!,
       finishReason: "completed",
@@ -106,6 +107,7 @@ describe("chat store", () => {
     })
     applyWorkerEvent(store, {
       type: "complete",
+      generatedTokens: 24,
       modelId,
       requestId: requestId!,
       finishReason: "length",
@@ -192,6 +194,44 @@ describe("chat store", () => {
       "LFM2 700M",
       "LFM2 1.2B",
     ])
+  })
+
+  it("trims model history to the configured recent turn window", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.setState({
+      messages: Array.from({ length: 18 }, (_, index) => ({
+        content:
+          index % 2 === 0
+            ? `User turn ${index / 2 + 1}`
+            : `Assistant turn ${Math.ceil(index / 2)}`,
+        createdAt: index,
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        state: "done",
+      })),
+      runtimeStatus: "ready",
+    })
+
+    store.getState().sendMessage("Newest turn")
+
+    expect(runtime.generate).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "lfm2-350m",
+      expect.arrayContaining([
+        { role: "user", content: "User turn 3" },
+        { role: "assistant", content: "Assistant turn 3" },
+        { role: "user", content: "Newest turn" },
+      ])
+    )
+
+    const payload = runtime.events.at(-1)?.payload as {
+      messages: Array<{ role: string; content: string }>
+    }
+
+    expect(payload.messages.find((message) => message.content === "User turn 1")).toBeUndefined()
+    expect(payload.messages.filter((message) => message.role === "user")).toHaveLength(8)
   })
 
   it("ignores stale worker events from a previous model", () => {
