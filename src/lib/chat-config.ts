@@ -10,7 +10,7 @@ type NavigatorWithDeviceMemory = Navigator & {
 }
 
 const desktopModel: ChatModelConfig = {
-  description: "Desktop recommended for longer, richer replies.",
+  description: "Balanced default for most devices with solid local chat quality.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -29,7 +29,7 @@ const desktopModel: ChatModelConfig = {
 }
 
 const desktopQualityModel: ChatModelConfig = {
-  description: "Best lightweight desktop quality with a bit more patience.",
+  description: "Stronger desktop-only upgrade for richer local answers.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -47,8 +47,27 @@ const desktopQualityModel: ChatModelConfig = {
   supportsMobile: false,
 }
 
+const desktopExperimentalModel: ChatModelConfig = {
+  description: "Strongest local desktop option in the current Bumblebee catalog.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 256,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.66,
+    top_p: 0.9,
+  },
+  id: "lfm2-1.2b",
+  label: "LFM2 1.2B",
+  modelId: "onnx-community/LFM2-1.2B-ONNX",
+  shortLabel: "1.2B",
+  supportsDesktop: true,
+  supportsMobile: false,
+}
+
 const smallQualityModel: ChatModelConfig = {
-  description: "Stronger mobile tier with noticeably better chat quality.",
+  description: "Stronger mobile step-up with better response quality.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -67,7 +86,7 @@ const smallQualityModel: ChatModelConfig = {
 }
 
 const mobileModel: ChatModelConfig = {
-  description: "Smaller on-device model chosen for mobile and low-memory devices.",
+  description: "Safest mobile option and the fastest lightweight starting point.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -86,7 +105,7 @@ const mobileModel: ChatModelConfig = {
 }
 
 const compactGeneralModel: ChatModelConfig = {
-  description: "Strongest small general chat model while staying browser friendly.",
+  description: "Stronger all-around small chat model while staying browser friendly.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -110,6 +129,7 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "lfm2-350m": desktopModel,
   "qwen2.5-0.5b": compactGeneralModel,
   "lfm2-700m": desktopQualityModel,
+  "lfm2-1.2b": desktopExperimentalModel,
 }
 
 export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-350m"

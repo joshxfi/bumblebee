@@ -4,6 +4,7 @@ export type ChatRole = "user" | "assistant" | "system"
 export type ChatMessageState = "streaming" | "done" | "error"
 export type ChatModelDtype = "q4" | "q4f16"
 export type ChatModelId =
+  | "lfm2-1.2b"
   | "lfm2-350m"
   | "lfm2-700m"
   | "qwen2.5-0.5b"
