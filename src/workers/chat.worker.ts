@@ -37,16 +37,78 @@ type WebGpuNavigator = Navigator & {
 env.allowLocalModels = false
 env.useBrowserCache = true
 
+const STREAM_FLUSH_INTERVAL_MS = 40
+const STREAM_FLUSH_THRESHOLD_CHARS = 48
+
 let generator: Generator | null = null
 let loadedModelId: ChatModelId | null = null
 let loadPromise: Promise<Generator> | null = null
 let loadingModelId: ChatModelId | null = null
 let activeRequestId: string | null = null
 let activeDevice: ChatDevice = "wasm"
+let bufferedText = ""
+let bufferedModelId: ChatModelId | null = null
+let bufferedRequestId: string | null = null
+let flushTimeoutId: number | null = null
 const interruptable = new InterruptableStoppingCriteria()
 
 function postMessage(event: WorkerEvent) {
   self.postMessage(event)
+}
+
+function clearFlushTimeout() {
+  if (flushTimeoutId !== null) {
+    clearTimeout(flushTimeoutId)
+    flushTimeoutId = null
+  }
+}
+
+function flushBufferedText() {
+  clearFlushTimeout()
+
+  if (
+    !bufferedText ||
+    !bufferedModelId ||
+    !bufferedRequestId ||
+    activeRequestId !== bufferedRequestId
+  ) {
+    bufferedText = ""
+    bufferedModelId = null
+    bufferedRequestId = null
+    return
+  }
+
+  postMessage({
+    type: "token",
+    modelId: bufferedModelId,
+    requestId: bufferedRequestId,
+    text: bufferedText,
+  })
+
+  bufferedText = ""
+  bufferedModelId = null
+  bufferedRequestId = null
+}
+
+function bufferChunk(modelId: ChatModelId, requestId: string, text: string) {
+  if (!text || activeRequestId !== requestId) {
+    return
+  }
+
+  bufferedText += text
+  bufferedModelId = modelId
+  bufferedRequestId = requestId
+
+  if (bufferedText.length >= STREAM_FLUSH_THRESHOLD_CHARS) {
+    flushBufferedText()
+    return
+  }
+
+  if (flushTimeoutId === null) {
+    flushTimeoutId = self.setTimeout(() => {
+      flushBufferedText()
+    }, STREAM_FLUSH_INTERVAL_MS)
+  }
 }
 
 async function getDeviceCandidates(): Promise<ChatDevice[]> {
@@ -114,6 +176,7 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
 
   const candidates = await getDeviceCandidates()
   const model = getModelConfig(modelId)
+  performance.mark(`worker-model-load-start:${modelId}`)
 
   loadingModelId = modelId
   loadPromise = (async () => {
@@ -156,6 +219,10 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
         }
 
         const loaded = await pipeline("text-generation", model.modelId, options)
+        performance.measure(
+          `worker-model-load:${modelId}`,
+          `worker-model-load-start:${modelId}`
+        )
 
         generator = loaded
         loadedModelId = modelId
@@ -202,11 +269,15 @@ async function runGeneration(
   messages: ModelMessage[]
 ) {
   activeRequestId = requestId
+  bufferedText = ""
+  bufferedModelId = modelId
+  bufferedRequestId = requestId
 
   try {
     const activeGenerator = await loadGenerator(modelId)
     const model = getModelConfig(modelId)
     interruptable.reset()
+    performance.mark(`worker-generation-start:${requestId}`)
 
     const stoppingCriteria = new StoppingCriteriaList()
     stoppingCriteria.push(interruptable)
@@ -214,11 +285,7 @@ async function runGeneration(
 
     const streamer = new TextStreamer(activeGenerator.tokenizer, {
       callback_function: (text) => {
-        if (!text || activeRequestId !== requestId) {
-          return
-        }
-
-        postMessage({ type: "token", modelId, requestId, text })
+        bufferChunk(modelId, requestId, text)
       },
       skip_prompt: true,
       token_callback_function: (tokens) => {
@@ -234,8 +301,15 @@ async function runGeneration(
       stopping_criteria: StoppingCriteriaList
     })
 
+    flushBufferedText()
+    performance.measure(
+      `worker-generation:${requestId}`,
+      `worker-generation-start:${requestId}`
+    )
+
     postMessage({
       type: "complete",
+      generatedTokens: generatedTokenCount,
       modelId,
       requestId,
       finishReason: interruptable.interrupted
@@ -245,6 +319,7 @@ async function runGeneration(
           : "completed",
     })
   } catch (error) {
+    flushBufferedText()
     postMessage({
       type: "error",
       modelId,
@@ -252,6 +327,10 @@ async function runGeneration(
       requestId,
     })
   } finally {
+    clearFlushTimeout()
+    bufferedText = ""
+    bufferedModelId = null
+    bufferedRequestId = null
     activeRequestId = null
     interruptable.reset()
   }
@@ -279,11 +358,16 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
 
     case "stop": {
       interruptable.interrupt()
+      flushBufferedText()
       return
     }
 
     case "reset": {
       activeRequestId = null
+      clearFlushTimeout()
+      bufferedText = ""
+      bufferedModelId = null
+      bufferedRequestId = null
       interruptable.reset()
     }
   }

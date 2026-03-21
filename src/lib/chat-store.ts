@@ -113,6 +113,18 @@ function appendAssistantChunk(
     return [...messages, createChatMessage("assistant", chunk, "streaming")]
   }
 
+  const lastMessage = messages.at(-1)
+  if (lastMessage?.id === activeAssistantId) {
+    return [
+      ...messages.slice(0, -1),
+      {
+        ...lastMessage,
+        content: `${lastMessage.content}${chunk}`,
+        state: "streaming",
+      },
+    ]
+  }
+
   return messages.map((message) =>
     message.id === activeAssistantId
       ? {
@@ -181,6 +193,44 @@ function dropLastAssistantTurn(messages: ChatMessage[]) {
 
 function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
   return pruneConversation(messages).map(({ role, content }) => ({
+    role,
+    content,
+  }))
+}
+
+function trimMessagesForModel(
+  messages: ChatMessage[],
+  modelId: ChatModelId
+): ChatMessage[] {
+  const visibleMessages = pruneConversation(messages)
+  const historyTurns = getModelConfig(modelId).historyTurns
+
+  let userTurns = 0
+  let startIndex = 0
+
+  for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
+    if (visibleMessages[index]?.role === "user") {
+      userTurns += 1
+
+      if (userTurns > historyTurns) {
+        startIndex = index + 1
+        break
+      }
+    }
+  }
+
+  while (visibleMessages[startIndex]?.role === "assistant") {
+    startIndex += 1
+  }
+
+  return visibleMessages.slice(startIndex)
+}
+
+function toModelMessagesForModel(
+  messages: ChatMessage[],
+  modelId: ChatModelId
+): ModelMessage[] {
+  return trimMessagesForModel(messages, modelId).map(({ role, content }) => ({
     role,
     content,
   }))
@@ -261,7 +311,10 @@ export function createChatStore(
         return
       }
 
-      const visibleMessages = pruneConversation(state.messages)
+      const visibleMessages = trimMessagesForModel(
+        state.messages,
+        state.selectedModelId
+      )
       const continuationHistory = [
         ...toModelMessages(visibleMessages),
         { role: "user", content: CONTINUE_PROMPT } satisfies ModelMessage,
@@ -346,7 +399,7 @@ export function createChatStore(
       runtime.generate(
         assistantMessage.id,
         state.selectedModelId,
-        toModelMessages(history)
+        toModelMessagesForModel(history, state.selectedModelId)
       )
     },
     sendMessage: (value) => {
@@ -385,7 +438,7 @@ export function createChatStore(
       runtime.generate(
         assistantMessage.id,
         state.selectedModelId,
-        toModelMessages(nextMessages)
+        toModelMessagesForModel(nextMessages, state.selectedModelId)
       )
     },
     setComposer: (value) => {
