@@ -1,11 +1,7 @@
 import { CpuIcon, WarningIcon } from "@phosphor-icons/react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValue,
-} from "@/components/ui/progress"
+import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { formatPercent } from "@/lib/chat-config"
 import type { RuntimeStatus } from "@/lib/chat-types"
 
@@ -73,9 +69,6 @@ export function ChatPrepareModel({
         <div className="mt-3">
           <Progress value={progress ?? 8}>
             <ProgressLabel>{modelLabel} warmup</ProgressLabel>
-            <ProgressValue>
-              {() => formattedProgress ?? "Preparing"}
-            </ProgressValue>
           </Progress>
         </div>
         {progressMeta ? (

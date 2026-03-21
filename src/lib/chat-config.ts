@@ -11,8 +11,6 @@ type NavigatorWithDeviceMemory = Navigator & {
 
 const desktopModel: ChatModelConfig = {
   description: "Desktop recommended for longer, richer replies.",
-  deviceLabel: "Desktop recommended",
-  disabledOnConstrained: false,
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -26,12 +24,50 @@ const desktopModel: ChatModelConfig = {
   label: "LFM2 350M",
   modelId: "onnx-community/LFM2-350M-ONNX",
   shortLabel: "350M",
+  supportsDesktop: true,
+  supportsMobile: true,
+}
+
+const desktopQualityModel: ChatModelConfig = {
+  description: "Best lightweight desktop quality with a bit more patience.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 224,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.68,
+    top_p: 0.9,
+  },
+  id: "lfm2-700m",
+  label: "LFM2 700M",
+  modelId: "onnx-community/LFM2-700M-ONNX",
+  shortLabel: "700M",
+  supportsDesktop: true,
+  supportsMobile: false,
+}
+
+const smallQualityModel: ChatModelConfig = {
+  description: "Stronger mobile tier with noticeably better chat quality.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 144,
+    repetition_penalty: 1.05,
+    return_full_text: false,
+    temperature: 0.72,
+    top_p: 0.92,
+  },
+  id: "smollm2-360m",
+  label: "SmolLM2 360M",
+  modelId: "onnx-community/SmolLM2-360M-ONNX",
+  shortLabel: "360M",
+  supportsDesktop: true,
+  supportsMobile: true,
 }
 
 const mobileModel: ChatModelConfig = {
   description: "Smaller on-device model chosen for mobile and low-memory devices.",
-  deviceLabel: "Mobile safe",
-  disabledOnConstrained: false,
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -45,11 +81,35 @@ const mobileModel: ChatModelConfig = {
   label: "SmolLM2 135M",
   modelId: "onnx-community/SmolLM2-135M-Instruct-ONNX-MHA",
   shortLabel: "135M",
+  supportsDesktop: true,
+  supportsMobile: true,
+}
+
+const compactGeneralModel: ChatModelConfig = {
+  description: "Strongest small general chat model while staying browser friendly.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 176,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.7,
+    top_p: 0.9,
+  },
+  id: "qwen2.5-0.5b",
+  label: "Qwen2.5 0.5B",
+  modelId: "onnx-community/Qwen2.5-0.5B-Instruct-ONNX-MHA",
+  shortLabel: "0.5B",
+  supportsDesktop: true,
+  supportsMobile: true,
 }
 
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
-  "lfm2-350m": desktopModel,
   "smollm2-135m": mobileModel,
+  "smollm2-360m": smallQualityModel,
+  "lfm2-350m": desktopModel,
+  "qwen2.5-0.5b": compactGeneralModel,
+  "lfm2-700m": desktopQualityModel,
 }
 
 export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-350m"
@@ -72,13 +132,15 @@ export function getModelOptions(
 ): Array<ChatModelOption> {
   return Object.values(CHAT_MODELS).map((model) => ({
     description:
-      profile === "constrained" && model.disabledOnConstrained
-        ? `${model.description} Unavailable on this device.`
+      profile === "constrained" && !model.supportsMobile
+        ? `${model.description} Desktop only.`
         : model.description,
-    disabled: profile === "constrained" && model.disabledOnConstrained,
+    disabled: profile === "constrained" && !model.supportsMobile,
     id: model.id,
     label: model.label,
     shortLabel: model.shortLabel,
+    supportsDesktop: model.supportsDesktop,
+    supportsMobile: model.supportsMobile,
   }))
 }
 

@@ -1,5 +1,10 @@
 import { type ComponentProps } from "react"
-import { ArrowClockwiseIcon, TrashSimpleIcon } from "@phosphor-icons/react"
+import {
+  ArrowClockwiseIcon,
+  DesktopIcon,
+  DeviceMobileIcon,
+  TrashSimpleIcon,
+} from "@phosphor-icons/react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -105,14 +110,30 @@ export function ChatHeader({
                     disabled={model.disabled}
                     value={model.id}
                   >
-                    <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 whitespace-normal">
-                      <span className="leading-4 font-medium text-foreground">
-                        {model.label}
+                    <span className="flex min-w-0 flex-1 flex-col gap-1 whitespace-normal">
+                      <span className="flex min-w-0 items-start justify-between gap-3">
+                        <span className="leading-4 font-medium text-foreground">
+                          {model.label}
+                        </span>
+                        <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-muted-foreground">
+                          {model.supportsMobile ? (
+                            <DeviceMobileIcon
+                              aria-label="Mobile supported"
+                              className="size-3.5"
+                              weight="fill"
+                            />
+                          ) : null}
+                          {model.supportsDesktop ? (
+                            <DesktopIcon
+                              aria-label="Desktop supported"
+                              className="size-3.5"
+                              weight="fill"
+                            />
+                          ) : null}
+                        </span>
                       </span>
-                      <span className="text-[11px] leading-4 text-muted-foreground">
-                        {model.disabled
-                          ? "Desktop recommended"
-                          : model.description}
+                      <span className="max-w-[11.5rem] text-[11px] leading-4 text-muted-foreground sm:max-w-[13.5rem]">
+                        {model.disabled ? "Desktop only" : model.description}
                       </span>
                     </span>
                   </SelectItem>
