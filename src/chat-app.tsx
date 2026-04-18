@@ -93,11 +93,10 @@ export function ChatApp() {
         return loaded && total ? `${loaded} / ${total}` : null
       })()
 
-  const devPerfBarVisible =
-    import.meta.env.DEV && perfSample !== null && hasLoadedModel
+  const perfBarVisible = perfSample !== null && hasLoadedModel
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
-    : devPerfBarVisible
+    : perfBarVisible
       ? "bottom-[calc(9.25rem+env(safe-area-inset-bottom))] sm:bottom-[calc(8.75rem+env(safe-area-inset-bottom))]"
       : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -354,7 +353,7 @@ export function ChatApp() {
               runtimeStatus={runtimeStatus}
             />
           ) : null}
-          {import.meta.env.DEV && hasLoadedModel ? (
+          {hasLoadedModel && perfSample ? (
             <ChatPerfOverlay sample={perfSample} />
           ) : null}
           <div className="border border-border bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
