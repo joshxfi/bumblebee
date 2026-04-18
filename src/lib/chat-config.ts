@@ -29,6 +29,27 @@ const desktopModel: ChatModelConfig = {
   supportsMobile: true,
 }
 
+const desktopModelLfm25: ChatModelConfig = {
+  description:
+    "Liquid LFM2.5 350M refresh with improved quality in the same lightweight footprint as LFM2 350M.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 192,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.72,
+    top_p: 0.92,
+  },
+  historyTurns: 8,
+  id: "lfm2-5-350m",
+  label: "LFM2.5 350M",
+  modelId: "onnx-community/LFM2.5-350M-ONNX",
+  shortLabel: "2.5 350M",
+  supportsDesktop: true,
+  supportsMobile: true,
+}
+
 const desktopQualityModel: ChatModelConfig = {
   description: "Stronger desktop-only upgrade for richer local answers.",
   dtype: "q4",
@@ -213,48 +234,6 @@ const falconH1TinyMultilingualModel: ChatModelConfig = {
   supportsMobile: true,
 }
 
-const falconH1TinyCoderModel: ChatModelConfig = {
-  description:
-    "Falcon H1 Edge coder tune (~90M) focused on snippets, explanations, and small-program edits.",
-  dtype: "q4",
-  generation: {
-    do_sample: true,
-    max_new_tokens: 224,
-    repetition_penalty: 1.05,
-    return_full_text: false,
-    temperature: 0.55,
-    top_p: 0.88,
-  },
-  historyTurns: 8,
-  id: "falcon-h1-tiny-coder-90m",
-  label: "Falcon H1 Tiny Coder 90M",
-  modelId: "onnx-community/Falcon-H1-Tiny-Coder-90M-ONNX",
-  shortLabel: "FalconCode",
-  supportsDesktop: true,
-  supportsMobile: true,
-}
-
-const falconH1TinyToolCallingModel: ChatModelConfig = {
-  description:
-    "Falcon H1 Edge tool-calling variant (~90M); chat template targets JSON-style tool use.",
-  dtype: "q4",
-  generation: {
-    do_sample: true,
-    max_new_tokens: 192,
-    repetition_penalty: 1.06,
-    return_full_text: false,
-    temperature: 0.65,
-    top_p: 0.9,
-  },
-  historyTurns: 8,
-  id: "falcon-h1-tiny-tool-calling-90m",
-  label: "Falcon H1 Tiny Tool-Calling 90M",
-  modelId: "onnx-community/Falcon-H1-Tiny-Tool-Calling-90M-ONNX",
-  shortLabel: "FalconTools",
-  supportsDesktop: true,
-  supportsMobile: true,
-}
-
 const llama32_1bModel: ChatModelConfig = {
   description:
     "Popular small Llama instruct tune for reliable desktop chat quality.",
@@ -345,9 +324,8 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "qwen3-0.6b": qwen3_0_6bModel,
   "falcon-h1-tiny-90m-instruct": falconH1TinyModel,
   "falcon-h1-tiny-multilingual-100m-instruct": falconH1TinyMultilingualModel,
-  "falcon-h1-tiny-coder-90m": falconH1TinyCoderModel,
-  "falcon-h1-tiny-tool-calling-90m": falconH1TinyToolCallingModel,
   "lfm2-350m": desktopModel,
+  "lfm2-5-350m": desktopModelLfm25,
   "lfm2-700m": desktopQualityModel,
   "llama-3.2-1b-instruct": llama32_1bModel,
   "gemma-3-1b-it": gemma3_1bModel,
@@ -385,7 +363,7 @@ const PROVIDER_GROUP_ORDER = [
 const PROVIDER_GROUP_DESCRIPTIONS = {
   Bonsai: "Higher-capacity models aimed at desktop-class quality.",
   Falcon:
-    "TII Falcon H1 Edge line: tiny instruct, multilingual, coder, and tool-calling builds for local chat.",
+    "TII Falcon H1 tiny instruct and multilingual instruct for edge-friendly chat.",
   Gemma: "Google's open Gemma checkpoints for chat and text generation.",
   LFM: "Liquid AI LFM models tuned for efficient in-browser inference.",
   Llama: "Meta Llama open-weight instruct models for assistant-style chat.",
@@ -409,15 +387,14 @@ export function getModelProviderGroup(id: ChatModelId): string {
     case "bonsai-1.7b":
       return "Bonsai"
     case "falcon-h1-tiny-90m-instruct":
-    case "falcon-h1-tiny-coder-90m":
     case "falcon-h1-tiny-multilingual-100m-instruct":
-    case "falcon-h1-tiny-tool-calling-90m":
       return "Falcon"
     case "gemma-3-1b-it":
     case "gemma-3-270m-it":
       return "Gemma"
     case "lfm2-1.2b":
     case "lfm2-350m":
+    case "lfm2-5-350m":
     case "lfm2-700m":
       return "LFM"
     case "llama-3.2-1b-instruct":

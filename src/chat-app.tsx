@@ -93,7 +93,8 @@ export function ChatApp() {
         return loaded && total ? `${loaded} / ${total}` : null
       })()
 
-  const devPerfBarVisible = import.meta.env.DEV && perfSample !== null
+  const devPerfBarVisible =
+    import.meta.env.DEV && perfSample !== null && hasLoadedModel
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
     : devPerfBarVisible
@@ -353,7 +354,7 @@ export function ChatApp() {
               runtimeStatus={runtimeStatus}
             />
           ) : null}
-          {import.meta.env.DEV ? (
+          {import.meta.env.DEV && hasLoadedModel ? (
             <ChatPerfOverlay sample={perfSample} />
           ) : null}
           <div className="border border-border bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
