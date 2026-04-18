@@ -158,28 +158,34 @@ describe("chat store", () => {
     expect(store.getState().availableModels.map((model) => model.id)).toEqual([
       "smollm2-135m",
       "smollm2-360m",
-      "lfm2-350m",
+      "gemma-3-270m-it",
       "qwen2.5-0.5b",
+      "qwen3-0.6b",
+      "lfm2-350m",
       "lfm2-700m",
+      "llama-3.2-1b-instruct",
+      "gemma-3-1b-it",
       "lfm2-1.2b",
+      "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
     ])
     expect(
       store.getState().availableModels.find((model) => model.id === "lfm2-350m")
         ?.disabled
     ).toBe(false)
-    expect(
-      store.getState().availableModels.find((model) => model.id === "lfm2-700m")
-        ?.disabled
-    ).toBe(true)
-    expect(
-      store.getState().availableModels.find((model) => model.id === "lfm2-1.2b")
-        ?.disabled
-    ).toBe(true)
-    expect(
-      store.getState().availableModels.find((model) => model.id === "bonsai-1.7b")
-        ?.disabled
-    ).toBe(true)
+    for (const modelId of [
+      "lfm2-700m",
+      "llama-3.2-1b-instruct",
+      "gemma-3-1b-it",
+      "lfm2-1.2b",
+      "tinyswallow-1.5b-instruct",
+      "bonsai-1.7b",
+    ] as const) {
+      expect(
+        store.getState().availableModels.find((model) => model.id === modelId)
+          ?.disabled
+      ).toBe(true)
+    }
     store.getState().setSelectedModel("lfm2-350m")
 
     expect(store.getState().selectedModelId).toBe("lfm2-350m")
@@ -194,10 +200,15 @@ describe("chat store", () => {
     expect(store.getState().availableModels.map((model) => model.label)).toEqual([
       "SmolLM2 135M",
       "SmolLM2 360M",
-      "LFM2 350M",
+      "Gemma 3 270M",
       "Qwen2.5 0.5B",
+      "Qwen3 0.6B",
+      "LFM2 350M",
       "LFM2 700M",
+      "Llama 3.2 1B",
+      "Gemma 3 1B",
       "LFM2 1.2B",
+      "TinySwallow 1.5B",
       "Bonsai 1.7B",
     ])
   })

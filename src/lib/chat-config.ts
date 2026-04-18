@@ -129,6 +129,109 @@ const compactGeneralModel: ChatModelConfig = {
   supportsMobile: true,
 }
 
+const gemma3_270mModel: ChatModelConfig = {
+  description:
+    "Compact instruct model that stays friendlier on modest hardware and mobile.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 168,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.7,
+    top_p: 0.9,
+  },
+  historyTurns: 8,
+  id: "gemma-3-270m-it",
+  label: "Gemma 3 270M",
+  modelId: "onnx-community/gemma-3-270m-it-ONNX",
+  shortLabel: "Gemma270M",
+  supportsDesktop: true,
+  supportsMobile: true,
+}
+
+const qwen3_0_6bModel: ChatModelConfig = {
+  description:
+    "Tiny Qwen3 instruct tune with strong multilingual habits in a browser-friendly size.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 176,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.7,
+    top_p: 0.9,
+  },
+  historyTurns: 8,
+  id: "qwen3-0.6b",
+  label: "Qwen3 0.6B",
+  modelId: "onnx-community/Qwen3-0.6B-ONNX",
+  shortLabel: "Qwen3",
+  supportsDesktop: true,
+  supportsMobile: true,
+}
+
+const llama32_1bModel: ChatModelConfig = {
+  description:
+    "Popular small Llama instruct tune for reliable desktop chat quality.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 224,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.68,
+    top_p: 0.9,
+  },
+  historyTurns: 10,
+  id: "llama-3.2-1b-instruct",
+  label: "Llama 3.2 1B",
+  modelId: "onnx-community/Llama-3.2-1B-Instruct-ONNX",
+  shortLabel: "Llama1B",
+  supportsDesktop: true,
+  supportsMobile: false,
+}
+
+const gemma3_1bModel: ChatModelConfig = {
+  description: "Slightly larger Gemma 3 instruct for better nuance on desktop.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 224,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.68,
+    top_p: 0.9,
+  },
+  historyTurns: 10,
+  id: "gemma-3-1b-it",
+  label: "Gemma 3 1B",
+  modelId: "onnx-community/gemma-3-1b-it-ONNX",
+  shortLabel: "Gemma1B",
+  supportsDesktop: true,
+  supportsMobile: false,
+}
+
+const tinySwallowModel: ChatModelConfig = {
+  description: "Dense 1.5B instruct alternative for richer desktop replies.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 240,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.67,
+    top_p: 0.9,
+  },
+  historyTurns: 10,
+  id: "tinyswallow-1.5b-instruct",
+  label: "TinySwallow 1.5B",
+  modelId: "onnx-community/TinySwallow-1.5B-Instruct-ONNX",
+  shortLabel: "Swallow",
+  supportsDesktop: true,
+  supportsMobile: false,
+}
+
 const bonsaiModel: ChatModelConfig = {
   description:
     "Stronger desktop-only dense option for richer replies at a mid-size footprint.",
@@ -153,10 +256,15 @@ const bonsaiModel: ChatModelConfig = {
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "smollm2-135m": mobileModel,
   "smollm2-360m": smallQualityModel,
-  "lfm2-350m": desktopModel,
+  "gemma-3-270m-it": gemma3_270mModel,
   "qwen2.5-0.5b": compactGeneralModel,
+  "qwen3-0.6b": qwen3_0_6bModel,
+  "lfm2-350m": desktopModel,
   "lfm2-700m": desktopQualityModel,
+  "llama-3.2-1b-instruct": llama32_1bModel,
+  "gemma-3-1b-it": gemma3_1bModel,
   "lfm2-1.2b": desktopExperimentalModel,
+  "tinyswallow-1.5b-instruct": tinySwallowModel,
   "bonsai-1.7b": bonsaiModel,
 }
 
