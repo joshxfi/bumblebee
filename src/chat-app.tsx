@@ -93,9 +93,12 @@ export function ChatApp() {
         return loaded && total ? `${loaded} / ${total}` : null
       })()
 
+  const devPerfBarVisible = import.meta.env.DEV && perfSample !== null
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
-    : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
+    : devPerfBarVisible
+      ? "bottom-[calc(9.25rem+env(safe-area-inset-bottom))] sm:bottom-[calc(8.75rem+env(safe-area-inset-bottom))]"
+      : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: shouldVirtualize ? messages.length : 0,
@@ -229,7 +232,6 @@ export function ChatApp() {
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
-      {import.meta.env.DEV ? <ChatPerfOverlay sample={perfSample} /> : null}
       <ChatHeader
         availableModels={availableModels}
         canRetry={canRetry}
@@ -350,6 +352,9 @@ export function ChatApp() {
               progressMeta={progressMeta}
               runtimeStatus={runtimeStatus}
             />
+          ) : null}
+          {import.meta.env.DEV ? (
+            <ChatPerfOverlay sample={perfSample} />
           ) : null}
           <div className="border border-border bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
             <div className="flex items-end gap-2">
