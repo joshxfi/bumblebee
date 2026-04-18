@@ -187,11 +187,11 @@ describe("chat store", () => {
     expect(store.getState().hasLoadedModel).toBe(false)
   })
 
-  it("defaults constrained devices to the smaller model but still allows the desktop model", () => {
+  it("defaults constrained devices to Falcon H1 Tiny 90M but still allows larger mobile models", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime, { deviceProfile: "constrained" })
 
-    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(store.getState().selectedModelId).toBe("falcon-h1-tiny-90m-instruct")
     expect(store.getState().availableModels.map((model) => model.id)).toEqual([
       "smollm2-135m",
       "smollm2-360m",
@@ -200,8 +200,8 @@ describe("chat store", () => {
       "qwen3-0.6b",
       "falcon-h1-tiny-90m-instruct",
       "falcon-h1-tiny-multilingual-100m-instruct",
-      "lfm2-350m",
       "lfm2-5-350m",
+      "lfm2-350m",
       "lfm2-700m",
       "llama-3.2-1b-instruct",
       "gemma-3-1b-it",
@@ -210,8 +210,9 @@ describe("chat store", () => {
       "bonsai-1.7b",
     ])
     expect(
-      store.getState().availableModels.find((model) => model.id === "lfm2-350m")
-        ?.disabled
+      store.getState().availableModels.find(
+        (model) => model.id === "lfm2-5-350m"
+      )?.disabled
     ).toBe(false)
     for (const modelId of [
       "lfm2-700m",
@@ -232,11 +233,11 @@ describe("chat store", () => {
     expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps the balanced desktop default while exposing the full model ladder", () => {
+  it("keeps LFM2.5 350M as the desktop default while exposing the full model ladder", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime, { deviceProfile: "standard" })
 
-    expect(store.getState().selectedModelId).toBe("lfm2-350m")
+    expect(store.getState().selectedModelId).toBe("lfm2-5-350m")
     expect(store.getState().availableModels.map((model) => model.label)).toEqual([
       "SmolLM2 135M",
       "SmolLM2 360M",
@@ -245,8 +246,8 @@ describe("chat store", () => {
       "Qwen3 0.6B",
       "Falcon H1 Tiny 90M",
       "Falcon H1 Tiny Multilingual 100M",
-      "LFM2 350M",
       "LFM2.5 350M",
+      "LFM2 350M",
       "LFM2 700M",
       "Llama 3.2 1B",
       "Gemma 3 1B",
@@ -278,7 +279,7 @@ describe("chat store", () => {
 
     expect(runtime.generate).toHaveBeenLastCalledWith(
       expect.any(String),
-      "lfm2-350m",
+      "lfm2-5-350m",
       expect.arrayContaining([
         { role: "user", content: "User turn 3" },
         { role: "assistant", content: "Assistant turn 3" },

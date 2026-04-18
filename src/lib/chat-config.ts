@@ -324,8 +324,8 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "qwen3-0.6b": qwen3_0_6bModel,
   "falcon-h1-tiny-90m-instruct": falconH1TinyModel,
   "falcon-h1-tiny-multilingual-100m-instruct": falconH1TinyMultilingualModel,
-  "lfm2-350m": desktopModel,
   "lfm2-5-350m": desktopModelLfm25,
+  "lfm2-350m": desktopModel,
   "lfm2-700m": desktopQualityModel,
   "llama-3.2-1b-instruct": llama32_1bModel,
   "gemma-3-1b-it": gemma3_1bModel,
@@ -334,7 +334,7 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "bonsai-1.7b": bonsaiModel,
 }
 
-export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-350m"
+export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-5-350m"
 
 export const CHAT_COPY = {
   subtitle:
@@ -342,7 +342,7 @@ export const CHAT_COPY = {
   warmup:
     "First run downloads the tokenizer and weights from Hugging Face, then the browser cache handles repeat visits.",
   footnote:
-    "Bumblebee uses a lighter model on mobile and other constrained devices to reduce browser crashes.",
+    "Bumblebee defaults to Falcon H1 Tiny 90M on mobile and other constrained devices to reduce browser crashes.",
 } as const
 
 export function getModelConfig(modelId: ChatModelId) {
@@ -461,7 +461,9 @@ export function getModelOptions(
 }
 
 export function getRecommendedModelId(profile: DeviceProfile): ChatModelId {
-  return profile === "constrained" ? "smollm2-135m" : DEFAULT_MODEL_ID
+  return profile === "constrained"
+    ? "falcon-h1-tiny-90m-instruct"
+    : DEFAULT_MODEL_ID
 }
 
 export function getDeviceProfile(
