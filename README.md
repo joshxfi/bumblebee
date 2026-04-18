@@ -8,6 +8,8 @@ Use it as a small reference for local-first browser AI, Web Workers, streaming U
 
 Live demo: [bumblebee.joshxfi.com](https://bumblebee.joshxfi.com)
 
+**Source:** [Open source on GitHub](https://github.com/joshxfi/bumblebee) · **Author:** [@joshxfi](https://github.com/joshxfi)
+
 ## What It Does
 
 - Runs text generation in a **Web Worker** so inference does not block the UI thread

@@ -3,6 +3,7 @@ import { ArrowUpRightIcon } from "@phosphor-icons/react"
 import { starterPrompts } from "@/components/chat/chat-ui"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PROJECT_AUTHOR, PROJECT_REPO_URL } from "@/lib/site-meta"
 
 type ChatEmptyStateProps = {
   busy: boolean
@@ -48,16 +49,27 @@ export function ChatEmptyState({
         ))}
       </div>
 
-      <div className="mt-4 max-w-xl">
+      <div className="mt-4 flex max-w-xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <a
           className="inline-flex items-center gap-2 border border-border bg-card px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          href="https://github.com/joshxfi/bumblebee"
+          href={PROJECT_REPO_URL}
           rel="noreferrer noopener"
           target="_blank"
         >
           <ArrowUpRightIcon />
           <span>View the project on GitHub</span>
         </a>
+        <p className="text-xs text-muted-foreground sm:pl-1">
+          By{" "}
+          <a
+            className="text-foreground underline decoration-border underline-offset-2 hover:decoration-primary"
+            href={PROJECT_AUTHOR.profileUrl}
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            {PROJECT_AUTHOR.handle}
+          </a>
+        </p>
       </div>
     </div>
   )

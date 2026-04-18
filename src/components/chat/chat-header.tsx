@@ -5,10 +5,12 @@ import {
   CheckIcon,
   DesktopIcon,
   DeviceMobileIcon,
+  InfoIcon,
   TrashSimpleIcon,
 } from "@phosphor-icons/react"
+import { Link } from "react-router-dom"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { ChatModelId, ChatModelOption } from "@/lib/chat-types"
+import { cn } from "@/lib/utils"
 
 function useSubmenuSideForViewport(): "bottom" | "right" {
   return useSyncExternalStore(
@@ -120,6 +123,27 @@ export function ChatHeader({
         </div>
 
         <div className="flex min-w-0 items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Link
+                  aria-label="About Bumblebee"
+                  className={cn(
+                    buttonVariants({
+                      className:
+                        "border-border bg-card text-foreground hover:bg-accent",
+                      size: "icon-sm",
+                      variant: "outline",
+                    })
+                  )}
+                  to="/about"
+                >
+                  <InfoIcon aria-hidden weight="fill" />
+                </Link>
+              }
+            />
+            <TooltipContent>About Bumblebee</TooltipContent>
+          </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
