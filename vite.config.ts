@@ -1,7 +1,10 @@
-import path from "path"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
+
+const root = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -38,7 +41,13 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(root, "./src"),
+      // Worker builds may resolve the package "node" export; that bundle pulls
+      // onnxruntime-node/sharp and crashes in the browser. Force the web entry.
+      "@huggingface/transformers": path.resolve(
+        root,
+        "node_modules/@huggingface/transformers/dist/transformers.web.js"
+      ),
     },
   },
   test: {

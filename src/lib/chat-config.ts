@@ -129,6 +129,27 @@ const compactGeneralModel: ChatModelConfig = {
   supportsMobile: true,
 }
 
+const bonsaiModel: ChatModelConfig = {
+  description:
+    "Stronger desktop-only dense option for richer replies at a mid-size footprint.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 224,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.68,
+    top_p: 0.9,
+  },
+  historyTurns: 8,
+  id: "bonsai-1.7b",
+  label: "Bonsai 1.7B",
+  modelId: "onnx-community/Bonsai-1.7B-ONNX",
+  shortLabel: "Bonsai",
+  supportsDesktop: true,
+  supportsMobile: false,
+}
+
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "smollm2-135m": mobileModel,
   "smollm2-360m": smallQualityModel,
@@ -136,6 +157,7 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "qwen2.5-0.5b": compactGeneralModel,
   "lfm2-700m": desktopQualityModel,
   "lfm2-1.2b": desktopExperimentalModel,
+  "bonsai-1.7b": bonsaiModel,
 }
 
 export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-350m"

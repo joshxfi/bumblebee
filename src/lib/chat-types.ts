@@ -1,9 +1,8 @@
-import type { Message } from "@huggingface/transformers"
-
 export type ChatRole = "user" | "assistant" | "system"
 export type ChatMessageState = "streaming" | "done" | "error"
 export type ChatModelDtype = "q4" | "q4f16"
 export type ChatModelId =
+  | "bonsai-1.7b"
   | "lfm2-1.2b"
   | "lfm2-350m"
   | "lfm2-700m"
@@ -59,7 +58,10 @@ export type ChatMessage = {
   state: ChatMessageState
 }
 
-export type ModelMessage = Pick<Message, "role" | "content">
+export type ModelMessage = {
+  role: ChatRole
+  content: string
+}
 
 export type ModelLoadProgress = {
   phase: string

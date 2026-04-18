@@ -162,6 +162,7 @@ describe("chat store", () => {
       "qwen2.5-0.5b",
       "lfm2-700m",
       "lfm2-1.2b",
+      "bonsai-1.7b",
     ])
     expect(
       store.getState().availableModels.find((model) => model.id === "lfm2-350m")
@@ -173,6 +174,10 @@ describe("chat store", () => {
     ).toBe(true)
     expect(
       store.getState().availableModels.find((model) => model.id === "lfm2-1.2b")
+        ?.disabled
+    ).toBe(true)
+    expect(
+      store.getState().availableModels.find((model) => model.id === "bonsai-1.7b")
         ?.disabled
     ).toBe(true)
     store.getState().setSelectedModel("lfm2-350m")
@@ -193,6 +198,7 @@ describe("chat store", () => {
       "Qwen2.5 0.5B",
       "LFM2 700M",
       "LFM2 1.2B",
+      "Bonsai 1.7B",
     ])
   })
 
