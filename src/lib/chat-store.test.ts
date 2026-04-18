@@ -54,6 +54,43 @@ describe("chat store", () => {
     )
   })
 
+  it("cancels an in-flight model load and restores an uncommitted send turn", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().setComposer("Explain local inference in one paragraph.")
+    store.getState().sendMessage()
+    expect(store.getState().runtimeStatus).toBe("loading-model")
+
+    store.getState().cancelModelLoad()
+
+    const state = store.getState()
+    expect(state.runtimeStatus).toBe("idle")
+    expect(state.messages).toHaveLength(0)
+    expect(state.composer).toBe("Explain local inference in one paragraph.")
+    expect(state.activeAssistantId).toBeNull()
+    expect(state.activeRequestId).toBeNull()
+    expect(state.loadProgress).toBeNull()
+    expect(runtime.reset).toHaveBeenCalled()
+    expect(runtime.recreateWorker).toHaveBeenCalled()
+  })
+
+  it("cancels prepare-only load without touching composer when empty", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().initModel()
+    expect(store.getState().runtimeStatus).toBe("loading-model")
+
+    store.getState().cancelModelLoad()
+
+    expect(store.getState().runtimeStatus).toBe("idle")
+    expect(store.getState().messages).toHaveLength(0)
+    expect(store.getState().composer).toBe("")
+    expect(runtime.reset).toHaveBeenCalled()
+    expect(runtime.recreateWorker).toHaveBeenCalled()
+  })
+
   it("hydrates streaming chunks and completes back to ready", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)

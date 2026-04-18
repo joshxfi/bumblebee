@@ -39,6 +39,7 @@ type ChatStoreState = {
   pendingStop: boolean
   runtimeStatus: RuntimeStatus
   selectedModelId: ChatModelId
+  cancelModelLoad: () => void
   clearChat: () => void
   continueLastResponse: () => void
   dismissError: () => void
@@ -52,6 +53,7 @@ type ChatStoreState = {
 
 type MutableChatState = Omit<
   ChatStoreState,
+  | "cancelModelLoad"
   | "clearChat"
   | "continueLastResponse"
   | "dismissError"
@@ -366,6 +368,41 @@ export function createChatStore(
         runtimeStatus: "loading-model",
       })
       runtime.init(state.selectedModelId)
+    },
+    cancelModelLoad: () => {
+      const state = get()
+      if (state.runtimeStatus !== "loading-model") {
+        return
+      }
+
+      let nextMessages = state.messages
+      let nextComposer = state.composer
+      const last = state.messages.at(-1)
+      const prev = state.messages.at(-2)
+      if (
+        last?.role === "assistant" &&
+        last.state === "streaming" &&
+        prev?.role === "user"
+      ) {
+        nextMessages = state.messages.slice(0, -2)
+        nextComposer = prev.content
+      }
+
+      runtime.reset()
+      runtime.recreateWorker()
+
+      set({
+        activeAssistantId: null,
+        activeDevice: null,
+        activeRequestId: null,
+        composer: nextComposer,
+        error: null,
+        hasLoadedModel: false,
+        loadProgress: null,
+        messages: nextMessages,
+        pendingStop: false,
+        runtimeStatus: "idle",
+      })
     },
     retryLastTurn: () => {
       const state = get()

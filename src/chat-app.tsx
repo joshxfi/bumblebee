@@ -35,6 +35,7 @@ export function ChatApp() {
     (state) => state.continueLastResponse
   )
   const initModel = useChatStore((state) => state.initModel)
+  const cancelModelLoad = useChatStore((state) => state.cancelModelLoad)
   const stopGeneration = useChatStore((state) => state.stopGeneration)
   const retryLastTurn = useChatStore((state) => state.retryLastTurn)
   const clearChat = useChatStore((state) => state.clearChat)
@@ -342,6 +343,7 @@ export function ChatApp() {
               deviceProfile={deviceProfile}
               error={error}
               modelLabel={selectedModel.label}
+              onCancelModelLoad={cancelModelLoad}
               onDismissError={dismissError}
               onInitModel={initModel}
               progress={loadProgress?.progress ?? null}
