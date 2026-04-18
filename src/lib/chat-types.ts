@@ -1,15 +1,22 @@
-import type { Message } from "@huggingface/transformers"
-
 export type ChatRole = "user" | "assistant" | "system"
 export type ChatMessageState = "streaming" | "done" | "error"
 export type ChatModelDtype = "q4" | "q4f16"
 export type ChatModelId =
+  | "bonsai-1.7b"
+  | "falcon-h1-tiny-90m-instruct"
+  | "falcon-h1-tiny-multilingual-100m-instruct"
+  | "gemma-3-1b-it"
+  | "gemma-3-270m-it"
   | "lfm2-1.2b"
   | "lfm2-350m"
+  | "lfm2-5-350m"
   | "lfm2-700m"
+  | "llama-3.2-1b-instruct"
   | "qwen2.5-0.5b"
+  | "qwen3-0.6b"
   | "smollm2-135m"
   | "smollm2-360m"
+  | "tinyswallow-1.5b-instruct"
 export type DeviceProfile = "constrained" | "standard"
 export type FinishReason = "completed" | "length" | "stopped"
 export type RuntimeStatus =
@@ -45,6 +52,7 @@ export type ChatModelOption = {
   disabled: boolean
   id: ChatModelId
   label: string
+  providerGroup: string
   shortLabel: string
   supportsDesktop: boolean
   supportsMobile: boolean
@@ -59,7 +67,10 @@ export type ChatMessage = {
   state: ChatMessageState
 }
 
-export type ModelMessage = Pick<Message, "role" | "content">
+export type ModelMessage = {
+  role: ChatRole
+  content: string
+}
 
 export type ModelLoadProgress = {
   phase: string

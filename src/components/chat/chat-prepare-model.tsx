@@ -10,6 +10,7 @@ type ChatPrepareModelProps = {
   deviceProfile: "constrained" | "standard"
   error: string | null
   modelLabel: string
+  onCancelModelLoad: () => void
   onDismissError: () => void
   onInitModel: () => void
   progress: number | null
@@ -22,6 +23,7 @@ export function ChatPrepareModel({
   deviceProfile,
   error,
   modelLabel,
+  onCancelModelLoad,
   onDismissError,
   onInitModel,
   progress,
@@ -62,8 +64,13 @@ export function ChatPrepareModel({
             <div className="font-medium text-foreground">Preparing model</div>
             <p className="mt-1 text-muted-foreground">{detail}</p>
           </div>
-          <div className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-primary">
-            {formattedProgress ?? "Syncing"}
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-primary">
+              {formattedProgress ?? "Syncing"}
+            </div>
+            <Button size="xs" variant="outline" onClick={onCancelModelLoad}>
+              Cancel
+            </Button>
           </div>
         </div>
         <div className="mt-3">

@@ -1,6 +1,8 @@
 import { Suspense, lazy } from "react"
+import { BrowserRouter, Route, Routes } from "react-router-dom"
 
 const ChatApp = lazy(() => import("./chat-app"))
+const AboutPage = lazy(() => import("./pages/about-page"))
 
 function AppFallback() {
   return (
@@ -19,9 +21,14 @@ function AppFallback() {
 
 export function App() {
   return (
-    <Suspense fallback={<AppFallback />}>
-      <ChatApp />
-    </Suspense>
+    <BrowserRouter>
+      <Suspense fallback={<AppFallback />}>
+        <Routes>
+          <Route path="/" element={<ChatApp />} />
+          <Route path="/about" element={<AboutPage />} />
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
   )
 }
 

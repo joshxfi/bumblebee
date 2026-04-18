@@ -54,6 +54,43 @@ describe("chat store", () => {
     )
   })
 
+  it("cancels an in-flight model load and restores an uncommitted send turn", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().setComposer("Explain local inference in one paragraph.")
+    store.getState().sendMessage()
+    expect(store.getState().runtimeStatus).toBe("loading-model")
+
+    store.getState().cancelModelLoad()
+
+    const state = store.getState()
+    expect(state.runtimeStatus).toBe("idle")
+    expect(state.messages).toHaveLength(0)
+    expect(state.composer).toBe("Explain local inference in one paragraph.")
+    expect(state.activeAssistantId).toBeNull()
+    expect(state.activeRequestId).toBeNull()
+    expect(state.loadProgress).toBeNull()
+    expect(runtime.reset).toHaveBeenCalled()
+    expect(runtime.recreateWorker).toHaveBeenCalled()
+  })
+
+  it("cancels prepare-only load without touching composer when empty", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().initModel()
+    expect(store.getState().runtimeStatus).toBe("loading-model")
+
+    store.getState().cancelModelLoad()
+
+    expect(store.getState().runtimeStatus).toBe("idle")
+    expect(store.getState().messages).toHaveLength(0)
+    expect(store.getState().composer).toBe("")
+    expect(runtime.reset).toHaveBeenCalled()
+    expect(runtime.recreateWorker).toHaveBeenCalled()
+  })
+
   it("hydrates streaming chunks and completes back to ready", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
@@ -150,49 +187,73 @@ describe("chat store", () => {
     expect(store.getState().hasLoadedModel).toBe(false)
   })
 
-  it("defaults constrained devices to the smaller model but still allows the desktop model", () => {
+  it("defaults constrained devices to Falcon H1 Tiny 90M but still allows larger mobile models", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime, { deviceProfile: "constrained" })
 
-    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(store.getState().selectedModelId).toBe("falcon-h1-tiny-90m-instruct")
     expect(store.getState().availableModels.map((model) => model.id)).toEqual([
       "smollm2-135m",
       "smollm2-360m",
-      "lfm2-350m",
+      "gemma-3-270m-it",
       "qwen2.5-0.5b",
+      "qwen3-0.6b",
+      "falcon-h1-tiny-90m-instruct",
+      "falcon-h1-tiny-multilingual-100m-instruct",
+      "lfm2-5-350m",
+      "lfm2-350m",
       "lfm2-700m",
+      "llama-3.2-1b-instruct",
+      "gemma-3-1b-it",
       "lfm2-1.2b",
+      "tinyswallow-1.5b-instruct",
+      "bonsai-1.7b",
     ])
     expect(
-      store.getState().availableModels.find((model) => model.id === "lfm2-350m")
-        ?.disabled
+      store.getState().availableModels.find(
+        (model) => model.id === "lfm2-5-350m"
+      )?.disabled
     ).toBe(false)
-    expect(
-      store.getState().availableModels.find((model) => model.id === "lfm2-700m")
-        ?.disabled
-    ).toBe(true)
-    expect(
-      store.getState().availableModels.find((model) => model.id === "lfm2-1.2b")
-        ?.disabled
-    ).toBe(true)
+    for (const modelId of [
+      "lfm2-700m",
+      "llama-3.2-1b-instruct",
+      "gemma-3-1b-it",
+      "lfm2-1.2b",
+      "tinyswallow-1.5b-instruct",
+      "bonsai-1.7b",
+    ] as const) {
+      expect(
+        store.getState().availableModels.find((model) => model.id === modelId)
+          ?.disabled
+      ).toBe(true)
+    }
     store.getState().setSelectedModel("lfm2-350m")
 
     expect(store.getState().selectedModelId).toBe("lfm2-350m")
     expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps the balanced desktop default while exposing the full model ladder", () => {
+  it("keeps LFM2.5 350M as the desktop default while exposing the full model ladder", () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime, { deviceProfile: "standard" })
 
-    expect(store.getState().selectedModelId).toBe("lfm2-350m")
+    expect(store.getState().selectedModelId).toBe("lfm2-5-350m")
     expect(store.getState().availableModels.map((model) => model.label)).toEqual([
       "SmolLM2 135M",
       "SmolLM2 360M",
-      "LFM2 350M",
+      "Gemma 3 270M",
       "Qwen2.5 0.5B",
+      "Qwen3 0.6B",
+      "Falcon H1 Tiny 90M",
+      "Falcon H1 Tiny Multilingual 100M",
+      "LFM2.5 350M",
+      "LFM2 350M",
       "LFM2 700M",
+      "Llama 3.2 1B",
+      "Gemma 3 1B",
       "LFM2 1.2B",
+      "TinySwallow 1.5B",
+      "Bonsai 1.7B",
     ])
   })
 
@@ -218,7 +279,7 @@ describe("chat store", () => {
 
     expect(runtime.generate).toHaveBeenLastCalledWith(
       expect.any(String),
-      "lfm2-350m",
+      "lfm2-5-350m",
       expect.arrayContaining([
         { role: "user", content: "User turn 3" },
         { role: "assistant", content: "Assistant turn 3" },

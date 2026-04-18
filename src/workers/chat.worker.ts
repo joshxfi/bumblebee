@@ -336,6 +336,14 @@ async function runGeneration(
   }
 }
 
+self.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+  postMessage({
+    type: "error",
+    error: getErrorMessage(event.reason),
+  })
+  event.preventDefault()
+})
+
 self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
   const payload = event.data
 
