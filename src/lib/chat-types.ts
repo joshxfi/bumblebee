@@ -49,6 +49,7 @@ export type ChatModelOption = {
   disabled: boolean
   id: ChatModelId
   label: string
+  providerGroup: string
   shortLabel: string
   supportsDesktop: boolean
   supportsMobile: boolean

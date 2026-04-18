@@ -283,6 +283,92 @@ export function getModelConfig(modelId: ChatModelId) {
   return CHAT_MODELS[modelId]
 }
 
+const PROVIDER_GROUP_ORDER = [
+  "SmolLM",
+  "Gemma",
+  "Qwen",
+  "LFM",
+  "Llama",
+  "TinySwallow",
+  "Bonsai",
+] as const
+
+const PROVIDER_GROUP_DESCRIPTIONS = {
+  Bonsai: "Higher-capacity ONNX checkpoints aimed at desktop-class quality.",
+  Gemma: "Google's open Gemma checkpoints for chat and text generation.",
+  LFM: "Liquid AI LFM models tuned for efficient in-browser inference.",
+  Llama: "Meta Llama open-weight instruct models for assistant-style chat.",
+  Qwen: "Alibaba Qwen compact models with strong multilingual coverage.",
+  SmolLM: "Light Hugging Face instruction models for fast on-device replies.",
+  TinySwallow:
+    "Swallow-family instruct models with Japanese and English support.",
+} as const satisfies Record<(typeof PROVIDER_GROUP_ORDER)[number], string>
+
+export function getProviderGroupDescription(providerGroup: string): string {
+  if (providerGroup in PROVIDER_GROUP_DESCRIPTIONS) {
+    return PROVIDER_GROUP_DESCRIPTIONS[
+      providerGroup as keyof typeof PROVIDER_GROUP_DESCRIPTIONS
+    ]
+  }
+  return ""
+}
+
+export function getModelProviderGroup(id: ChatModelId): string {
+  switch (id) {
+    case "bonsai-1.7b":
+      return "Bonsai"
+    case "gemma-3-1b-it":
+    case "gemma-3-270m-it":
+      return "Gemma"
+    case "lfm2-1.2b":
+    case "lfm2-350m":
+    case "lfm2-700m":
+      return "LFM"
+    case "llama-3.2-1b-instruct":
+      return "Llama"
+    case "qwen2.5-0.5b":
+    case "qwen3-0.6b":
+      return "Qwen"
+    case "smollm2-135m":
+    case "smollm2-360m":
+      return "SmolLM"
+    case "tinyswallow-1.5b-instruct":
+      return "TinySwallow"
+  }
+}
+
+export function groupChatModelsByProvider(
+  models: ChatModelOption[]
+): Array<{ providerGroup: string; models: ChatModelOption[] }> {
+  const buckets = new Map<string, ChatModelOption[]>()
+  for (const model of models) {
+    const list = buckets.get(model.providerGroup)
+    if (list) {
+      list.push(model)
+    } else {
+      buckets.set(model.providerGroup, [model])
+    }
+  }
+
+  const ordered: Array<{ providerGroup: string; models: ChatModelOption[] }> =
+    []
+  for (const name of PROVIDER_GROUP_ORDER) {
+    const groupModels = buckets.get(name)
+    if (groupModels?.length) {
+      ordered.push({ providerGroup: name, models: groupModels })
+    }
+  }
+  for (const [providerGroup, groupModels] of buckets) {
+    if (
+      !(PROVIDER_GROUP_ORDER as readonly string[]).includes(providerGroup) &&
+      groupModels.length > 0
+    ) {
+      ordered.push({ providerGroup, models: groupModels })
+    }
+  }
+  return ordered
+}
+
 export function getModelOptions(
   profile: DeviceProfile
 ): Array<ChatModelOption> {
@@ -294,6 +380,7 @@ export function getModelOptions(
     disabled: profile === "constrained" && !model.supportsMobile,
     id: model.id,
     label: model.label,
+    providerGroup: getModelProviderGroup(model.id),
     shortLabel: model.shortLabel,
     supportsDesktop: model.supportsDesktop,
     supportsMobile: model.supportsMobile,
