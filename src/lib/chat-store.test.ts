@@ -60,6 +60,21 @@ function createRuntimeStub(): ChatRuntime & {
 }
 
 describe("chat store", () => {
+  it("clears isCompactingContext when the conversation is cleared", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.setState({
+      isCompactingContext: true,
+      messages: [],
+      runtimeStatus: "ready",
+    })
+
+    store.getState().clearChat()
+
+    expect(store.getState().isCompactingContext).toBe(false)
+  })
+
   it("queues a user turn and requests generation with the selected model", async () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)

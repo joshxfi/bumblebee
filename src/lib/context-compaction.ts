@@ -126,6 +126,59 @@ export function mergeDroppedMessages(
   return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
 }
 
+/** Messages that leave the window on this send (turn shift and/or char budget). Used for summarization + UI gating. */
+export function collectDroppedForSend(
+  baseMessages: ChatMessage[],
+  userMessage: ChatMessage,
+  modelId: ChatModelId,
+  priorRollingSummary: string
+): ChatMessage[] {
+  const afterTurn = trimTurnWindow([...baseMessages, userMessage], modelId)
+  const beforeTurn = trimTurnWindow(baseMessages, modelId)
+  const afterIds = new Set(afterTurn.map((message) => message.id))
+  const dropTurn = beforeTurn.filter((message) => !afterIds.has(message.id))
+
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    priorRollingSummary,
+    modelId
+  )
+
+  return mergeDroppedMessages(dropTurn, droppedFromBudget)
+}
+
+export function collectDroppedForRetry(
+  history: ChatMessage[],
+  modelId: ChatModelId,
+  priorRollingSummary: string
+): ChatMessage[] {
+  const afterTurn = trimTurnWindow(history, modelId)
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    priorRollingSummary,
+    modelId
+  )
+
+  return mergeDroppedMessages([], droppedFromBudget)
+}
+
+export function collectDroppedForContinue(
+  messages: ChatMessage[],
+  modelId: ChatModelId,
+  priorRollingSummary: string,
+  continueTail: ModelMessage[]
+): ChatMessage[] {
+  const afterTurn = trimTurnWindow(messages, modelId)
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    priorRollingSummary,
+    modelId,
+    continueTail
+  )
+
+  return mergeDroppedMessages([], droppedFromBudget)
+}
+
 export function buildSystemSummaryMessage(
   summaryText: string
 ): ModelMessage | null {
@@ -170,4 +223,73 @@ export function clampCompactionSummary(text: string, maxChars = 1200) {
     return trimmed
   }
   return `${trimmed.slice(0, maxChars)}…`
+}
+
+export type ContextWindowStats = {
+  /** Sum of characters for system summary + trimmed messages + optional trailing fragments (e.g. continue prompt). */
+  approxPromptChars: number
+  maxPromptChars: number
+  maxUserTurns: number
+  /** User messages retained after the turn window trim (before optional char-budget drops). */
+  userTurnsInTurnWindow: number
+}
+
+/**
+ * Approximate next-request footprint using the same trim + budget rules as payload building.
+ */
+export function getContextWindowStats(
+  messages: ChatMessage[],
+  modelId: ChatModelId,
+  rollingContextSummary: string,
+  trailingPayloadFragments: ModelMessage[] = []
+): ContextWindowStats {
+  const config = getModelConfig(modelId)
+  const afterTurn = trimTurnWindow(pruneConversation(messages), modelId)
+
+  const userTurnsInTurnWindow = afterTurn.reduce(
+    (count, message) => count + (message.role === "user" ? 1 : 0),
+    0
+  )
+
+  const { budgetTrimmed } = trimToCharBudget(
+    afterTurn,
+    rollingContextSummary,
+    modelId,
+    trailingPayloadFragments
+  )
+
+  const systemMessage = buildSystemSummaryMessage(rollingContextSummary)
+  const body = chatMessagesToModelMessages(budgetTrimmed)
+  const combined = [
+    ...(systemMessage ? [systemMessage] : []),
+    ...body,
+    ...trailingPayloadFragments,
+  ]
+
+  const approxPromptChars = combined.reduce(
+    (total, message) => total + message.content.length,
+    0
+  )
+
+  return {
+    approxPromptChars,
+    maxPromptChars: config.maxPromptChars,
+    maxUserTurns: config.historyTurns,
+    userTurnsInTurnWindow,
+  }
+}
+
+/** Compact label for header/tooltips (e.g. ~4.2k / 8.5k). */
+export function formatCharsShort(value: number) {
+  if (value < 1000) {
+    return `${Math.round(value)}`
+  }
+  const k = value / 1000
+  return `${k >= 10 ? Math.round(k) : k.toFixed(1)}k`
+}
+
+export function formatContextWindowLabel(stats: ContextWindowStats) {
+  const turns = `${stats.userTurnsInTurnWindow}/${stats.maxUserTurns}`
+  const chars = `~${formatCharsShort(stats.approxPromptChars)}/${formatCharsShort(stats.maxPromptChars)}`
+  return `Turns ${turns} · ${chars} chars`
 }

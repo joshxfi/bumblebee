@@ -16,7 +16,9 @@ import {
   buildSystemSummaryMessage,
   chatMessagesToModelMessages,
   clampCompactionSummary,
-  mergeDroppedMessages,
+  collectDroppedForContinue,
+  collectDroppedForRetry,
+  collectDroppedForSend,
   pruneConversation,
   serializeMessagesForSummary,
   trimToCharBudget,
@@ -45,6 +47,8 @@ type ChatStoreState = {
   deviceProfile: DeviceProfile
   error: string | null
   hasLoadedModel: boolean
+  /** True while async context compaction/summarization runs before main generation. */
+  isCompactingContext: boolean
   loadProgress: ModelLoadProgress | null
   messages: ChatMessage[]
   pendingStop: boolean
@@ -103,7 +107,7 @@ function createChatMessage(
   }
 }
 
-const CONTINUE_PROMPT =
+export const CONTINUE_PROMPT =
   "Continue your last response from where it stopped. Do not repeat prior text."
 
 function createInitialLoadProgress(modelId: ChatModelId): ModelLoadProgress {
@@ -283,18 +287,13 @@ async function buildCompactionPayloadForSend(args: {
     args
 
   const afterTurn = trimTurnWindow([...baseMessages, userMessage], modelId)
-  const beforeTurn = trimTurnWindow(baseMessages, modelId)
-  const afterIds = new Set(afterTurn.map((message) => message.id))
 
-  const dropTurn = beforeTurn.filter((message) => !afterIds.has(message.id))
-
-  const { droppedFromBudget } = trimToCharBudget(
-    afterTurn,
-    priorRollingSummary,
-    modelId
+  const allDropped = collectDroppedForSend(
+    baseMessages,
+    userMessage,
+    modelId,
+    priorRollingSummary
   )
-
-  const allDropped = mergeDroppedMessages(dropTurn, droppedFromBudget)
   const compactionDroppedChars = allDropped.reduce(
     (total, message) => total + message.content.length,
     0
@@ -334,13 +333,7 @@ async function buildCompactionPayloadForRetry(args: {
 
   const afterTurn = trimTurnWindow(history, modelId)
 
-  const { droppedFromBudget } = trimToCharBudget(
-    afterTurn,
-    priorRollingSummary,
-    modelId
-  )
-
-  const allDropped = mergeDroppedMessages([], droppedFromBudget)
+  const allDropped = collectDroppedForRetry(history, modelId, priorRollingSummary)
   const compactionDroppedChars = allDropped.reduce(
     (total, message) => total + message.content.length,
     0
@@ -384,14 +377,12 @@ async function buildCompactionPayloadForContinue(args: {
 
   const afterTurn = trimTurnWindow(messages, modelId)
 
-  const { droppedFromBudget } = trimToCharBudget(
-    afterTurn,
-    priorRollingSummary,
+  const allDropped = collectDroppedForContinue(
+    messages,
     modelId,
+    priorRollingSummary,
     continueTail
   )
-
-  const allDropped = mergeDroppedMessages([], droppedFromBudget)
   const compactionDroppedChars = allDropped.reduce(
     (total, message) => total + message.content.length,
     0
@@ -461,6 +452,7 @@ function createBaseState(
     rollingContextSummary: "",
     runtimeStatus: "idle",
     selectedModelId,
+    isCompactingContext: false,
   }
 }
 
@@ -491,6 +483,7 @@ export function createChatStore(
         pendingStop: false,
         rollingContextSummary: "",
         runtimeStatus: state.hasLoadedModel ? "ready" : "idle",
+        isCompactingContext: false,
       }))
     },
     continueLastResponse: () => {
@@ -509,6 +502,17 @@ export function createChatStore(
 
       const modelId = state.selectedModelId
 
+      const continueTailPreview: ModelMessage[] = [
+        { role: "user", content: CONTINUE_PROMPT },
+      ]
+      const willRunCompactionSummarize =
+        collectDroppedForContinue(
+          state.messages,
+          modelId,
+          state.rollingContextSummary,
+          continueTailPreview
+        ).length > 0
+
       set({
         activeAssistantId: targetMessage.id,
         activeRequestId: targetMessage.id,
@@ -522,19 +526,26 @@ export function createChatStore(
       })
 
       void (async () => {
-        const payload = await buildCompactionPayloadForContinue({
-          messages: state.messages,
-          modelId,
-          priorRollingSummary: state.rollingContextSummary,
-          runtime,
-        })
+        if (willRunCompactionSummarize) {
+          set({ isCompactingContext: true })
+        }
+        try {
+          const payload = await buildCompactionPayloadForContinue({
+            messages: state.messages,
+            modelId,
+            priorRollingSummary: state.rollingContextSummary,
+            runtime,
+          })
 
-        set({ rollingContextSummary: payload.rollingSummary })
+          set({ rollingContextSummary: payload.rollingSummary })
 
-        runtime.generate(targetMessage.id, modelId, payload.modelMessages, {
-          compactionDroppedChars: payload.compactionDroppedChars,
-          compactionSummarizeMs: payload.compactionSummarizeMs,
-        })
+          runtime.generate(targetMessage.id, modelId, payload.modelMessages, {
+            compactionDroppedChars: payload.compactionDroppedChars,
+            compactionSummarizeMs: payload.compactionSummarizeMs,
+          })
+        } finally {
+          set({ isCompactingContext: false })
+        }
       })()
     },
     dismissError: () => {
@@ -632,20 +643,34 @@ export function createChatStore(
 
       const modelId = state.selectedModelId
 
-      void (async () => {
-        const payload = await buildCompactionPayloadForRetry({
+      const willRunCompactionSummarize =
+        collectDroppedForRetry(
           history,
           modelId,
-          priorRollingSummary: state.rollingContextSummary,
-          runtime,
-        })
+          state.rollingContextSummary
+        ).length > 0
 
-        set({ rollingContextSummary: payload.rollingSummary })
+      void (async () => {
+        if (willRunCompactionSummarize) {
+          set({ isCompactingContext: true })
+        }
+        try {
+          const payload = await buildCompactionPayloadForRetry({
+            history,
+            modelId,
+            priorRollingSummary: state.rollingContextSummary,
+            runtime,
+          })
 
-        runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
-          compactionDroppedChars: payload.compactionDroppedChars,
-          compactionSummarizeMs: payload.compactionSummarizeMs,
-        })
+          set({ rollingContextSummary: payload.rollingSummary })
+
+          runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
+            compactionDroppedChars: payload.compactionDroppedChars,
+            compactionSummarizeMs: payload.compactionSummarizeMs,
+          })
+        } finally {
+          set({ isCompactingContext: false })
+        }
       })()
     },
     sendMessage: (value) => {
@@ -669,6 +694,14 @@ export function createChatStore(
 
       const modelId = state.selectedModelId
 
+      const willRunCompactionSummarize =
+        collectDroppedForSend(
+          baseMessages,
+          userMessage,
+          modelId,
+          state.rollingContextSummary
+        ).length > 0
+
       set({
         activeAssistantId: assistantMessage.id,
         activeRequestId: assistantMessage.id,
@@ -684,20 +717,27 @@ export function createChatStore(
       })
 
       void (async () => {
-        const payload = await buildCompactionPayloadForSend({
-          baseMessages,
-          modelId,
-          priorRollingSummary: state.rollingContextSummary,
-          runtime,
-          userMessage,
-        })
+        if (willRunCompactionSummarize) {
+          set({ isCompactingContext: true })
+        }
+        try {
+          const payload = await buildCompactionPayloadForSend({
+            baseMessages,
+            modelId,
+            priorRollingSummary: state.rollingContextSummary,
+            runtime,
+            userMessage,
+          })
 
-        set({ rollingContextSummary: payload.rollingSummary })
+          set({ rollingContextSummary: payload.rollingSummary })
 
-        runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
-          compactionDroppedChars: payload.compactionDroppedChars,
-          compactionSummarizeMs: payload.compactionSummarizeMs,
-        })
+          runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
+            compactionDroppedChars: payload.compactionDroppedChars,
+            compactionSummarizeMs: payload.compactionSummarizeMs,
+          })
+        } finally {
+          set({ isCompactingContext: false })
+        }
       })()
     },
     setComposer: (value) => {
@@ -733,6 +773,7 @@ export function createChatStore(
         rollingContextSummary: "",
         runtimeStatus: "idle",
         selectedModelId: modelId,
+        isCompactingContext: false,
       }))
     },
     stopGeneration: () => {
