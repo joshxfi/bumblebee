@@ -1,114 +1,116 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { useVirtualizer } from "@tanstack/react-virtual"
-import { CircleNotchIcon, PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
-
-import { ChatEmptyState } from "@/components/chat/chat-empty-state"
-import { ChatHeader } from "@/components/chat/chat-header"
-import { ChatMessageBubble } from "@/components/chat/chat-message-bubble"
-import { ChatPerfOverlay } from "@/components/chat/chat-perf-overlay"
-import { ChatPrepareModel } from "@/components/chat/chat-prepare-model"
-import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button"
-import { copyToClipboard } from "@/components/chat/chat-ui"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { formatBytes, getModelConfig } from "@/lib/chat-config"
 import {
-  getLatestChatPerfSample,
-  subscribeChatPerf,
-} from "@/lib/chat-runtime"
+  CircleNotchIcon,
+  PaperPlaneTiltIcon,
+  StopIcon,
+} from "@phosphor-icons/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+
+import { ChatEmptyState } from "@/components/chat/chat-empty-state";
+import { ChatHeader } from "@/components/chat/chat-header";
+import { ChatMessageBubble } from "@/components/chat/chat-message-bubble";
+import { ChatPerfOverlay } from "@/components/chat/chat-perf-overlay";
+import { ChatPrepareModel } from "@/components/chat/chat-prepare-model";
+import { copyToClipboard } from "@/components/chat/chat-ui";
+import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { formatBytes, getModelConfig } from "@/lib/chat-config";
+import { getLatestChatPerfSample, subscribeChatPerf } from "@/lib/chat-runtime";
+import { CONTINUE_PROMPT, useChatStore } from "@/lib/chat-store";
+import type { ChatMessage } from "@/lib/chat-types";
 import {
   formatContextWindowLabel,
   getContextWindowStats,
-} from "@/lib/context-compaction"
-import { CONTINUE_PROMPT, useChatStore } from "@/lib/chat-store"
-import type { ChatMessage } from "@/lib/chat-types"
+} from "@/lib/context-compaction";
 
 export function ChatApp() {
-  const messages = useChatStore((state) => state.messages)
-  const composer = useChatStore((state) => state.composer)
-  const runtimeStatus = useChatStore((state) => state.runtimeStatus)
-  const error = useChatStore((state) => state.error)
-  const hasLoadedModel = useChatStore((state) => state.hasLoadedModel)
-  const loadProgress = useChatStore((state) => state.loadProgress)
-  const availableModels = useChatStore((state) => state.availableModels)
-  const selectedModelId = useChatStore((state) => state.selectedModelId)
-  const deviceProfile = useChatStore((state) => state.deviceProfile)
-  const setComposer = useChatStore((state) => state.setComposer)
-  const sendMessage = useChatStore((state) => state.sendMessage)
+  const messages = useChatStore((state) => state.messages);
+  const composer = useChatStore((state) => state.composer);
+  const runtimeStatus = useChatStore((state) => state.runtimeStatus);
+  const error = useChatStore((state) => state.error);
+  const hasLoadedModel = useChatStore((state) => state.hasLoadedModel);
+  const loadProgress = useChatStore((state) => state.loadProgress);
+  const availableModels = useChatStore((state) => state.availableModels);
+  const selectedModelId = useChatStore((state) => state.selectedModelId);
+  const deviceProfile = useChatStore((state) => state.deviceProfile);
+  const setComposer = useChatStore((state) => state.setComposer);
+  const sendMessage = useChatStore((state) => state.sendMessage);
   const continueLastResponse = useChatStore(
-    (state) => state.continueLastResponse
-  )
-  const initModel = useChatStore((state) => state.initModel)
-  const cancelModelLoad = useChatStore((state) => state.cancelModelLoad)
-  const stopGeneration = useChatStore((state) => state.stopGeneration)
-  const retryLastTurn = useChatStore((state) => state.retryLastTurn)
-  const clearChat = useChatStore((state) => state.clearChat)
-  const dismissError = useChatStore((state) => state.dismissError)
-  const setSelectedModel = useChatStore((state) => state.setSelectedModel)
+    (state) => state.continueLastResponse,
+  );
+  const initModel = useChatStore((state) => state.initModel);
+  const cancelModelLoad = useChatStore((state) => state.cancelModelLoad);
+  const stopGeneration = useChatStore((state) => state.stopGeneration);
+  const retryLastTurn = useChatStore((state) => state.retryLastTurn);
+  const clearChat = useChatStore((state) => state.clearChat);
+  const dismissError = useChatStore((state) => state.dismissError);
+  const setSelectedModel = useChatStore((state) => state.setSelectedModel);
   const isCompactingContext = useChatStore(
-    (state) => state.isCompactingContext
-  )
+    (state) => state.isCompactingContext,
+  );
   const rollingContextSummary = useChatStore(
-    (state) => state.rollingContextSummary
-  )
-  const scrollViewportRef = useRef<HTMLDivElement | null>(null)
-  const isNearBottomRef = useRef(true)
-  const copyFeedbackTimeoutRef = useRef<number | null>(null)
-  const previousMessageCountRef = useRef(0)
-  const previousLastMessageIdRef = useRef<string | null>(null)
-  const previousLastMessageLengthRef = useRef(0)
+    (state) => state.rollingContextSummary,
+  );
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
+  const isNearBottomRef = useRef(true);
+  const copyFeedbackTimeoutRef = useRef<number | null>(null);
+  const previousMessageCountRef = useRef(0);
+  const previousLastMessageIdRef = useRef<string | null>(null);
+  const previousLastMessageLengthRef = useRef(0);
   const [copiedMessageState, setCopiedMessageState] = useState<{
-    messageId: string
-    status: "copied" | "error"
-  } | null>(null)
-  const [isNearBottom, setIsNearBottom] = useState(true)
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+    messageId: string;
+    status: "copied" | "error";
+  } | null>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const perfSample = useSyncExternalStore(
     subscribeChatPerf,
     getLatestChatPerfSample,
-    () => null
-  )
+    () => null,
+  );
 
-  const selectedModel = getModelConfig(selectedModelId)
+  const selectedModel = getModelConfig(selectedModelId);
   const busy =
-    runtimeStatus === "generating" || runtimeStatus === "loading-model"
+    runtimeStatus === "generating" || runtimeStatus === "loading-model";
   const canRetry =
     !busy &&
     messages.some((message) => message.role === "user") &&
-    messages.at(-1)?.role !== "user"
-  const canSend = composer.trim().length > 0 && !busy
-  const shouldShowScrollToBottom = showScrollToBottom && !isNearBottom
+    messages.at(-1)?.role !== "user";
+  const canSend = composer.trim().length > 0 && !busy;
+  const shouldShowScrollToBottom = showScrollToBottom && !isNearBottom;
   const continuableMessageId =
     messages.at(-1)?.role === "assistant" &&
     messages.at(-1)?.finishReason === "length"
-      ? messages.at(-1)?.id ?? null
-      : null
-  const showPrepareModel = !hasLoadedModel
-  const shouldVirtualize = messages.length > 80
+      ? (messages.at(-1)?.id ?? null)
+      : null;
+  const showPrepareModel = !hasLoadedModel;
+  const shouldVirtualize = messages.length > 80;
   const virtualRowCount =
     shouldVirtualize && isCompactingContext
       ? messages.length + 1
-      : messages.length
+      : messages.length;
   const contextWindowLabel = useMemo(() => {
     if (messages.length === 0) {
-      return null
+      return null;
     }
-    const includeContinue = continuableMessageId !== null
+    const includeContinue = continuableMessageId !== null;
     const stats = getContextWindowStats(
       messages,
       selectedModelId,
       rollingContextSummary,
       includeContinue
         ? [{ content: CONTINUE_PROMPT, role: "user" as const }]
-        : []
-    )
-    return formatContextWindowLabel(stats)
-  }, [
-    continuableMessageId,
-    messages,
-    rollingContextSummary,
-    selectedModelId,
-  ])
+        : [],
+    );
+    return formatContextWindowLabel(stats);
+  }, [continuableMessageId, messages, rollingContextSummary, selectedModelId]);
   const mascotTone = error
     ? "error"
     : runtimeStatus === "loading-model"
@@ -117,90 +119,91 @@ export function ChatApp() {
         ? "typing"
         : runtimeStatus === "ready"
           ? "ready"
-          : "idle"
+          : "idle";
   const progressMeta = !loadProgress
     ? null
     : (() => {
-        const loaded = formatBytes(loadProgress.loaded)
-        const total = formatBytes(loadProgress.total)
+        const loaded = formatBytes(loadProgress.loaded);
+        const total = formatBytes(loadProgress.total);
 
-        return loaded && total ? `${loaded} / ${total}` : null
-      })()
+        return loaded && total ? `${loaded} / ${total}` : null;
+      })();
 
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
-    : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
+    : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]";
 
   const rowVirtualizer = useVirtualizer({
     count: shouldVirtualize ? virtualRowCount : 0,
     estimateSize: (index) => {
       if (isCompactingContext && index === messages.length) {
-        return 56
+        return 56;
       }
-      return 156
+      return 156;
     },
     gap: 12,
     getScrollElement: () => scrollViewportRef.current,
     overscan: 6,
     paddingEnd: 40,
     paddingStart: 16,
-  })
-  const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : []
+  });
+  const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : [];
 
   useEffect(() => {
     return () => {
       if (copyFeedbackTimeoutRef.current !== null) {
-        window.clearTimeout(copyFeedbackTimeoutRef.current)
+        window.clearTimeout(copyFeedbackTimeoutRef.current);
       }
-    }
-  }, [])
+    };
+  }, []);
 
   useEffect(() => {
-    const viewport = scrollViewportRef.current
+    const viewport = scrollViewportRef.current;
     if (!viewport) {
-      return
+      return;
     }
 
     const updateScrollState = () => {
       const distanceFromBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-      const nextIsNearBottom = distanceFromBottom < 56
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const nextIsNearBottom = distanceFromBottom < 56;
 
-      isNearBottomRef.current = nextIsNearBottom
-      setIsNearBottom(nextIsNearBottom)
-      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom)
-    }
+      isNearBottomRef.current = nextIsNearBottom;
+      setIsNearBottom(nextIsNearBottom);
+      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom);
+    };
 
-    updateScrollState()
-    viewport.addEventListener("scroll", updateScrollState, { passive: true })
+    updateScrollState();
+    viewport.addEventListener("scroll", updateScrollState, { passive: true });
 
     return () => {
-      viewport.removeEventListener("scroll", updateScrollState)
-    }
-  }, [messages.length])
+      viewport.removeEventListener("scroll", updateScrollState);
+    };
+  }, [messages.length]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: remeasure on compaction strip, new rows, or streaming edits (same length).
   useEffect(() => {
     if (!shouldVirtualize) {
-      return
+      return;
     }
 
-    rowVirtualizer.measure()
-  }, [isCompactingContext, messages, rowVirtualizer, shouldVirtualize])
+    rowVirtualizer.measure();
+  }, [isCompactingContext, messages, rowVirtualizer, shouldVirtualize]);
 
   useEffect(() => {
-    const viewport = scrollViewportRef.current
-    const lastMessage = messages.at(-1)
+    const viewport = scrollViewportRef.current;
+    const lastMessage = messages.at(-1);
 
     if (!viewport) {
-      return
+      return;
     }
 
     const isNewMessage =
       previousMessageCountRef.current !== messages.length ||
-      previousLastMessageIdRef.current !== (lastMessage?.id ?? null)
-    const lastMessageLength = lastMessage?.content.length ?? 0
+      previousLastMessageIdRef.current !== (lastMessage?.id ?? null);
+    const lastMessageLength = lastMessage?.content.length ?? 0;
     const isStreamingUpdate =
-      previousLastMessageLengthRef.current !== lastMessageLength
+      previousLastMessageLengthRef.current !== lastMessageLength;
 
     const rafId = window.requestAnimationFrame(() => {
       if (
@@ -210,64 +213,64 @@ export function ChatApp() {
         viewport.scrollTo({
           top: viewport.scrollHeight,
           behavior: isNewMessage ? "smooth" : "auto",
-        })
+        });
       }
 
       const distanceFromBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-      const nextIsNearBottom = distanceFromBottom < 56
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const nextIsNearBottom = distanceFromBottom < 56;
 
-      isNearBottomRef.current = nextIsNearBottom
-      setIsNearBottom(nextIsNearBottom)
-      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom)
+      isNearBottomRef.current = nextIsNearBottom;
+      setIsNearBottom(nextIsNearBottom);
+      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom);
 
-      previousMessageCountRef.current = messages.length
-      previousLastMessageIdRef.current = lastMessage?.id ?? null
-      previousLastMessageLengthRef.current = lastMessageLength
-    })
+      previousMessageCountRef.current = messages.length;
+      previousLastMessageIdRef.current = lastMessage?.id ?? null;
+      previousLastMessageLengthRef.current = lastMessageLength;
+    });
 
     return () => {
-      window.cancelAnimationFrame(rafId)
-    }
-  }, [isCompactingContext, messages])
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isCompactingContext, messages]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const viewport = scrollViewportRef.current
+    const viewport = scrollViewportRef.current;
     if (!viewport) {
-      return
+      return;
     }
 
-    isNearBottomRef.current = true
-    setIsNearBottom(true)
-    setShowScrollToBottom(false)
+    isNearBottomRef.current = true;
+    setIsNearBottom(true);
+    setShowScrollToBottom(false);
     viewport.scrollTo({
       top: viewport.scrollHeight,
       behavior,
-    })
-  }
+    });
+  };
 
   const handleCopyMessage = async (message: ChatMessage) => {
     if (message.content.trim().length === 0) {
-      return
+      return;
     }
 
     try {
-      await copyToClipboard(message.content)
-      setCopiedMessageState({ messageId: message.id, status: "copied" })
+      await copyToClipboard(message.content);
+      setCopiedMessageState({ messageId: message.id, status: "copied" });
     } catch {
-      setCopiedMessageState({ messageId: message.id, status: "error" })
+      setCopiedMessageState({ messageId: message.id, status: "error" });
     }
 
     if (copyFeedbackTimeoutRef.current !== null) {
-      window.clearTimeout(copyFeedbackTimeoutRef.current)
+      window.clearTimeout(copyFeedbackTimeoutRef.current);
     }
 
     copyFeedbackTimeoutRef.current = window.setTimeout(() => {
       setCopiedMessageState((current) =>
-        current?.messageId === message.id ? null : current
-      )
-    }, 1800)
-  }
+        current?.messageId === message.id ? null : current,
+      );
+    }, 1800);
+  };
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
@@ -306,7 +309,7 @@ export function ChatApp() {
             >
               {virtualRows.map((virtualRow) => {
                 const isCompactionStrip =
-                  isCompactingContext && virtualRow.index === messages.length
+                  isCompactingContext && virtualRow.index === messages.length;
 
                 if (isCompactionStrip) {
                   return (
@@ -315,7 +318,7 @@ export function ChatApp() {
                       key="__compaction_strip"
                       ref={(node) => {
                         if (node) {
-                          rowVirtualizer.measureElement(node)
+                          rowVirtualizer.measureElement(node);
                         }
                       }}
                       className="absolute top-0 left-0 w-full"
@@ -325,12 +328,12 @@ export function ChatApp() {
                     >
                       <ContextCompactionStrip />
                     </div>
-                  )
+                  );
                 }
 
-                const message = messages[virtualRow.index]
+                const message = messages[virtualRow.index];
                 if (!message) {
-                  return null
+                  return null;
                 }
 
                 return (
@@ -339,7 +342,7 @@ export function ChatApp() {
                     key={message.id}
                     ref={(node) => {
                       if (node) {
-                        rowVirtualizer.measureElement(node)
+                        rowVirtualizer.measureElement(node);
                       }
                     }}
                     className="absolute top-0 left-0 w-full"
@@ -363,7 +366,7 @@ export function ChatApp() {
                       onCopy={handleCopyMessage}
                     />
                   </div>
-                )
+                );
               })}
             </div>
           ) : (
@@ -434,11 +437,11 @@ export function ChatApp() {
                 onChange={(event) => setComposer(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" || event.shiftKey) {
-                    return
+                    return;
                   }
 
-                  event.preventDefault()
-                  sendMessage()
+                  event.preventDefault();
+                  sendMessage();
                 }}
               />
 
@@ -466,7 +469,7 @@ export function ChatApp() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function ContextCompactionStrip() {
@@ -481,7 +484,7 @@ function ContextCompactionStrip() {
       />
       <span>Updating conversation context…</span>
     </div>
-  )
+  );
 }
 
-export default ChatApp
+export default ChatApp;

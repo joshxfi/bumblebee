@@ -1,102 +1,102 @@
 import type {
   ChatGenerationOverrides,
-  ChatPerfSample,
   ChatModelId,
+  ChatPerfSample,
   ModelMessage,
   WorkerEvent,
   WorkerRequest,
-} from "@/lib/chat-types"
+} from "@/lib/chat-types";
 
-type ChatRuntimeListener = (event: WorkerEvent) => void
-type ChatPerfListener = (sample: ChatPerfSample | null) => void
+type ChatRuntimeListener = (event: WorkerEvent) => void;
+type ChatPerfListener = (sample: ChatPerfSample | null) => void;
 
 type LoadPerfState = {
-  modelId: ChatModelId
-  startedAt: number
-}
+  modelId: ChatModelId;
+  startedAt: number;
+};
 
 type RequestPerfState = {
-  compactionDroppedChars?: number
-  compactionSummarizeMs?: number
-  firstTokenAt: number | null
-  historyTurnCount: number
-  messageChars: number
-  modelId: ChatModelId
-  requestId: string
-  startedAt: number
-}
+  compactionDroppedChars?: number;
+  compactionSummarizeMs?: number;
+  firstTokenAt: number | null;
+  historyTurnCount: number;
+  messageChars: number;
+  modelId: ChatModelId;
+  requestId: string;
+  startedAt: number;
+};
 
-const perfListeners = new Set<ChatPerfListener>()
-let latestPerfSample: ChatPerfSample | null = null
+const perfListeners = new Set<ChatPerfListener>();
+let latestPerfSample: ChatPerfSample | null = null;
 
-const IS_DEV = Boolean(import.meta.env.DEV)
+const IS_DEV = Boolean(import.meta.env.DEV);
 
 export type ChatRuntimeGenerateOptions = {
-  compactionDroppedChars?: number
-  compactionSummarizeMs?: number
-  generationOverrides?: ChatGenerationOverrides
-}
+  compactionDroppedChars?: number;
+  compactionSummarizeMs?: number;
+  generationOverrides?: ChatGenerationOverrides;
+};
 
 export type ChatRuntime = {
-  subscribe: (listener: ChatRuntimeListener) => () => void
-  init: (modelId: ChatModelId) => void
+  subscribe: (listener: ChatRuntimeListener) => () => void;
+  init: (modelId: ChatModelId) => void;
   generate: (
     requestId: string,
     modelId: ChatModelId,
     messages: ModelMessage[],
-    options?: ChatRuntimeGenerateOptions
-  ) => void
-  stop: () => void
-  reset: () => void
-  recreateWorker: () => void
-  dispose: () => void
-}
+    options?: ChatRuntimeGenerateOptions,
+  ) => void;
+  stop: () => void;
+  reset: () => void;
+  recreateWorker: () => void;
+  dispose: () => void;
+};
 
 type WorkerLike = Pick<
   Worker,
   "addEventListener" | "removeEventListener" | "postMessage" | "terminate"
->
+>;
 
 export class ChatRuntimeClient implements ChatRuntime {
-  private readonly listeners = new Set<ChatRuntimeListener>()
-  private readonly createWorker: () => WorkerLike
-  private currentModelId: ChatModelId | null = null
-  private loadPerf: LoadPerfState | null = null
-  private readyModelId: ChatModelId | null = null
-  private requestPerf: RequestPerfState | null = null
-  private worker: WorkerLike
+  private readonly listeners = new Set<ChatRuntimeListener>();
+  private readonly createWorker: () => WorkerLike;
+  private currentModelId: ChatModelId | null = null;
+  private loadPerf: LoadPerfState | null = null;
+  private readyModelId: ChatModelId | null = null;
+  private requestPerf: RequestPerfState | null = null;
+  private worker: WorkerLike;
 
   constructor(createWorker: () => WorkerLike = createDefaultWorker) {
-    this.createWorker = createWorker
-    this.worker = createWorker()
-    this.bindWorker(this.worker)
+    this.createWorker = createWorker;
+    this.worker = createWorker();
+    this.bindWorker(this.worker);
   }
 
   subscribe(listener: ChatRuntimeListener) {
-    this.listeners.add(listener)
+    this.listeners.add(listener);
 
     return () => {
-      this.listeners.delete(listener)
-    }
+      this.listeners.delete(listener);
+    };
   }
 
   init(modelId: ChatModelId) {
-    this.currentModelId = modelId
+    this.currentModelId = modelId;
     if (this.readyModelId !== modelId) {
-      this.beginLoadPerf(modelId)
+      this.beginLoadPerf(modelId);
     }
-    this.worker.postMessage({ type: "init", modelId } satisfies WorkerRequest)
+    this.worker.postMessage({ type: "init", modelId } satisfies WorkerRequest);
   }
 
   generate(
     requestId: string,
     modelId: ChatModelId,
     messages: ModelMessage[],
-    options?: ChatRuntimeGenerateOptions
+    options?: ChatRuntimeGenerateOptions,
   ) {
-    this.currentModelId = modelId
+    this.currentModelId = modelId;
     if (this.readyModelId !== modelId && this.loadPerf?.modelId !== modelId) {
-      this.beginLoadPerf(modelId)
+      this.beginLoadPerf(modelId);
     }
     this.requestPerf = {
       compactionDroppedChars: options?.compactionDroppedChars,
@@ -104,80 +104,80 @@ export class ChatRuntimeClient implements ChatRuntime {
       firstTokenAt: null,
       historyTurnCount: messages.reduce(
         (count, message) => count + (message.role === "user" ? 1 : 0),
-        0
+        0,
       ),
       messageChars: messages.reduce(
         (count, message) => count + message.content.length,
-        0
+        0,
       ),
       modelId,
       requestId,
       startedAt: performance.now(),
-    }
-    performance.mark(`generation-start:${requestId}`)
+    };
+    performance.mark(`generation-start:${requestId}`);
     this.worker.postMessage({
       type: "generate",
       generationOverrides: options?.generationOverrides,
       modelId,
       requestId,
       messages,
-    } satisfies WorkerRequest)
+    } satisfies WorkerRequest);
   }
 
   stop() {
-    this.worker.postMessage({ type: "stop" } satisfies WorkerRequest)
+    this.worker.postMessage({ type: "stop" } satisfies WorkerRequest);
   }
 
   reset() {
-    this.worker.postMessage({ type: "reset" } satisfies WorkerRequest)
+    this.worker.postMessage({ type: "reset" } satisfies WorkerRequest);
   }
 
   recreateWorker() {
-    this.currentModelId = null
-    this.loadPerf = null
-    this.readyModelId = null
-    this.requestPerf = null
-    this.unbindWorker(this.worker)
-    this.worker.terminate()
-    this.worker = this.createWorker()
-    this.bindWorker(this.worker)
+    this.currentModelId = null;
+    this.loadPerf = null;
+    this.readyModelId = null;
+    this.requestPerf = null;
+    this.unbindWorker(this.worker);
+    this.worker.terminate();
+    this.worker = this.createWorker();
+    this.bindWorker(this.worker);
   }
 
   dispose() {
-    this.loadPerf = null
-    this.readyModelId = null
-    this.requestPerf = null
-    this.unbindWorker(this.worker)
-    this.worker.terminate()
-    this.listeners.clear()
+    this.loadPerf = null;
+    this.readyModelId = null;
+    this.requestPerf = null;
+    this.unbindWorker(this.worker);
+    this.worker.terminate();
+    this.listeners.clear();
   }
 
   private readonly handleMessage = (event: MessageEvent<WorkerEvent>) => {
-    this.recordPerfFromWorkerEvent(event.data)
-    this.emit(event.data)
-  }
+    this.recordPerfFromWorkerEvent(event.data);
+    this.emit(event.data);
+  };
 
   private readonly handleError = (event: ErrorEvent) => {
     this.emit({
       type: "error",
       modelId: this.currentModelId ?? undefined,
       error: event.message || "The inference worker crashed.",
-    })
-  }
+    });
+  };
 
   private bindWorker(worker: WorkerLike) {
-    worker.addEventListener("message", this.handleMessage as EventListener)
-    worker.addEventListener("error", this.handleError as EventListener)
+    worker.addEventListener("message", this.handleMessage as EventListener);
+    worker.addEventListener("error", this.handleError as EventListener);
   }
 
   private unbindWorker(worker: WorkerLike) {
-    worker.removeEventListener("message", this.handleMessage as EventListener)
-    worker.removeEventListener("error", this.handleError as EventListener)
+    worker.removeEventListener("message", this.handleMessage as EventListener);
+    worker.removeEventListener("error", this.handleError as EventListener);
   }
 
   private emit(event: WorkerEvent) {
     for (const listener of this.listeners) {
-      listener(event)
+      listener(event);
     }
   }
 
@@ -185,25 +185,25 @@ export class ChatRuntimeClient implements ChatRuntime {
     this.loadPerf = {
       modelId,
       startedAt: performance.now(),
-    }
-    performance.mark(`model-load-start:${modelId}`)
+    };
+    performance.mark(`model-load-start:${modelId}`);
   }
 
   private recordPerfFromWorkerEvent(event: WorkerEvent) {
     switch (event.type) {
       case "ready": {
-        this.readyModelId = event.modelId
+        this.readyModelId = event.modelId;
 
         if (this.loadPerf?.modelId !== event.modelId) {
-          return
+          return;
         }
 
-        const modelLoadMs = performance.now() - this.loadPerf.startedAt
+        const modelLoadMs = performance.now() - this.loadPerf.startedAt;
         performance.measure(
           `model-load:${event.modelId}`,
-          `model-load-start:${event.modelId}`
-        )
-        this.loadPerf = null
+          `model-load-start:${event.modelId}`,
+        );
+        this.loadPerf = null;
 
         emitPerfSample({
           device: event.device,
@@ -211,8 +211,8 @@ export class ChatRuntimeClient implements ChatRuntime {
           modelLoadMs,
           selectedModelId: event.modelId,
           timestamp: Date.now(),
-        })
-        return
+        });
+        return;
       }
 
       case "token": {
@@ -222,15 +222,15 @@ export class ChatRuntimeClient implements ChatRuntime {
           this.requestPerf.modelId !== event.modelId ||
           this.requestPerf.firstTokenAt !== null
         ) {
-          return
+          return;
         }
 
-        this.requestPerf.firstTokenAt = performance.now()
+        this.requestPerf.firstTokenAt = performance.now();
         performance.measure(
           `first-token:${event.requestId}`,
-          `generation-start:${event.requestId}`
-        )
-        return
+          `generation-start:${event.requestId}`,
+        );
+        return;
       }
 
       case "complete": {
@@ -239,19 +239,19 @@ export class ChatRuntimeClient implements ChatRuntime {
           this.requestPerf.requestId !== event.requestId ||
           this.requestPerf.modelId !== event.modelId
         ) {
-          return
+          return;
         }
 
-        const completionMs = performance.now() - this.requestPerf.startedAt
+        const completionMs = performance.now() - this.requestPerf.startedAt;
         const firstTokenMs =
           this.requestPerf.firstTokenAt === null
             ? undefined
-            : this.requestPerf.firstTokenAt - this.requestPerf.startedAt
+            : this.requestPerf.firstTokenAt - this.requestPerf.startedAt;
 
         performance.measure(
           `generation-complete:${event.requestId}`,
-          `generation-start:${event.requestId}`
-        )
+          `generation-start:${event.requestId}`,
+        );
 
         emitPerfSample({
           compactionDroppedChars: this.requestPerf.compactionDroppedChars,
@@ -268,10 +268,10 @@ export class ChatRuntimeClient implements ChatRuntime {
             completionMs > 0
               ? event.generatedTokens / (completionMs / 1000)
               : undefined,
-        })
+        });
 
-        this.requestPerf = null
-        return
+        this.requestPerf = null;
+        return;
       }
 
       case "error": {
@@ -280,7 +280,7 @@ export class ChatRuntimeClient implements ChatRuntime {
           event.requestId &&
           this.requestPerf.requestId === event.requestId
         ) {
-          this.requestPerf = null
+          this.requestPerf = null;
         }
       }
     }
@@ -288,40 +288,40 @@ export class ChatRuntimeClient implements ChatRuntime {
 }
 
 function emitPerfSample(sample: ChatPerfSample) {
-  latestPerfSample = sample
+  latestPerfSample = sample;
 
   if (IS_DEV) {
     const title =
       sample.kind === "load"
         ? `[perf] ${sample.selectedModelId} load`
-        : `[perf] ${sample.selectedModelId} generation`
+        : `[perf] ${sample.selectedModelId} generation`;
 
-    console.groupCollapsed(title)
-    console.table(sample)
-    console.groupEnd()
+    console.groupCollapsed(title);
+    console.table(sample);
+    console.groupEnd();
   }
 
   for (const listener of perfListeners) {
-    listener(sample)
+    listener(sample);
   }
 }
 
 export function subscribeChatPerf(listener: ChatPerfListener) {
-  perfListeners.add(listener)
+  perfListeners.add(listener);
 
   return () => {
-    perfListeners.delete(listener)
-  }
+    perfListeners.delete(listener);
+  };
 }
 
 export function getLatestChatPerfSample() {
-  return latestPerfSample
+  return latestPerfSample;
 }
 
 function createDefaultWorker() {
   return new Worker(new URL("../workers/chat.worker.ts", import.meta.url), {
     type: "module",
-  })
+  });
 }
 
 function createNoopRuntime(): ChatRuntime {
@@ -333,20 +333,20 @@ function createNoopRuntime(): ChatRuntime {
     reset: () => undefined,
     recreateWorker: () => undefined,
     dispose: () => undefined,
-  }
+  };
 }
 
-let defaultRuntime: ChatRuntime | null = null
+let defaultRuntime: ChatRuntime | null = null;
 
 export function getDefaultChatRuntime() {
   if (typeof Worker === "undefined") {
-    return createNoopRuntime()
+    return createNoopRuntime();
   }
 
   if (defaultRuntime) {
-    return defaultRuntime
+    return defaultRuntime;
   }
 
-  defaultRuntime = new ChatRuntimeClient()
-  return defaultRuntime
+  defaultRuntime = new ChatRuntimeClient();
+  return defaultRuntime;
 }

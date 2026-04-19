@@ -1,24 +1,24 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 function useDocumentClass(className: string) {
   const [active, setActive] = useState(() =>
     typeof document !== "undefined"
       ? document.documentElement.classList.contains(className)
-      : false
-  )
+      : false,
+  );
 
   useEffect(() => {
-    const root = document.documentElement
-    const sync = () => setActive(root.classList.contains(className))
-    sync()
-    const observer = new MutationObserver(sync)
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] })
-    return () => observer.disconnect()
-  }, [className])
+    const root = document.documentElement;
+    const sync = () => setActive(root.classList.contains(className));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [className]);
 
-  return active
+  return active;
 }
 
 /** Stacked vertically so each flow reads clearly on narrow viewports. */
@@ -27,37 +27,37 @@ const CHART_TYPICAL_HOSTED = `flowchart TB
     direction TB
     HB["Browser UI"] --> AS["App server"]
     AS --> RM["Remote model API"]
-  end`
+  end`;
 
 const CHART_BUMBLEBEE_PATH = `flowchart TB
   subgraph bee["Bumblebee"]
     direction TB
     BT["Browser tab"] <--> WW["Web Worker ONNX"]
     WW --> HF["Hugging Face CDN weights"]
-  end`
+  end`;
 
 const CHART_RUNTIME = `flowchart TB
   MT["Main thread React / Zustand"] <-->|postMessage| WW["Web Worker Transformers.js"]
-  WW -->|HTTPS| HF["Hugging Face ONNX / tokenizer"]`
+  WW -->|HTTPS| HF["Hugging Face ONNX / tokenizer"]`;
 
 function MermaidBlock({ chart }: { chart: string }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const baseId = useId().replace(/:/g, "")
-  const isDark = useDocumentClass("dark")
-  const nonceRef = useRef(0)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const baseId = useId().replace(/:/g, "");
+  const isDark = useDocumentClass("dark");
+  const nonceRef = useRef(0);
 
   useEffect(() => {
-    const el = containerRef.current
+    const el = containerRef.current;
     if (!el) {
-      return undefined
+      return undefined;
     }
 
-    let cancelled = false
-    nonceRef.current += 1
-    const nonce = nonceRef.current
+    let cancelled = false;
+    nonceRef.current += 1;
+    const nonce = nonceRef.current;
 
     void (async () => {
-      const mermaid = (await import("mermaid")).default
+      const mermaid = (await import("mermaid")).default;
       mermaid.initialize({
         fontFamily: "inherit",
         securityLevel: "strict",
@@ -66,43 +66,43 @@ function MermaidBlock({ chart }: { chart: string }) {
         themeVariables: {
           fontSize: "15px",
         },
-      })
+      });
 
       if (cancelled) {
-        return
+        return;
       }
 
       try {
         const { svg, bindFunctions } = await mermaid.render(
           `about-mermaid-${baseId}-${nonce}`,
-          chart
-        )
+          chart,
+        );
         if (cancelled || !containerRef.current) {
-          return
+          return;
         }
-        containerRef.current.innerHTML = svg
-        bindFunctions?.(containerRef.current)
+        containerRef.current.innerHTML = svg;
+        bindFunctions?.(containerRef.current);
       } catch {
         if (!cancelled && containerRef.current) {
           containerRef.current.textContent =
-            "This diagram could not be rendered."
+            "This diagram could not be rendered.";
         }
       }
-    })()
+    })();
 
     return () => {
-      cancelled = true
-    }
-  }, [baseId, chart, isDark])
+      cancelled = true;
+    };
+  }, [baseId, chart, isDark]);
 
   return (
     <div
       ref={containerRef}
       className={cn(
-        "min-h-[9rem] [&_svg]:mx-auto [&_svg]:block [&_svg]:h-auto [&_svg]:max-w-full [&_svg]:min-h-[min-content]"
+        "min-h-[9rem] [&_svg]:mx-auto [&_svg]:block [&_svg]:h-auto [&_svg]:max-w-full [&_svg]:min-h-[min-content]",
       )}
     />
-  )
+  );
 }
 
 /** Hosted SaaS chat vs Bumblebee: where inference runs. */
@@ -134,7 +134,7 @@ export function HostedVsLocalDiagram() {
         artifacts, not to send prompts to a Bumblebee-owned API.
       </figcaption>
     </figure>
-  )
+  );
 }
 
 /** Main thread, worker, and Hugging Face in the Bumblebee runtime. */
@@ -150,5 +150,5 @@ export function RuntimeArchitectureDiagram() {
         browser cache can reuse them.
       </figcaption>
     </figure>
-  )
+  );
 }

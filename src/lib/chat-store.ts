@@ -1,29 +1,12 @@
-import { useStore } from "zustand"
-import { createStore, type StoreApi } from "zustand/vanilla"
-
-import {
-  getDefaultChatRuntime,
-  type ChatRuntime,
-} from "@/lib/chat-runtime"
+import { useStore } from "zustand";
+import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   getDeviceProfile,
   getModelConfig,
   getModelOptions,
   getRecommendedModelId,
-} from "@/lib/chat-config"
-import {
-  buildCompactionSummarizeMessages,
-  buildSystemSummaryMessage,
-  chatMessagesToModelMessages,
-  clampCompactionSummary,
-  collectDroppedForContinue,
-  collectDroppedForRetry,
-  collectDroppedForSend,
-  pruneConversation,
-  serializeMessagesForSummary,
-  trimToCharBudget,
-  trimTurnWindow,
-} from "@/lib/context-compaction"
+} from "@/lib/chat-config";
+import { type ChatRuntime, getDefaultChatRuntime } from "@/lib/chat-runtime";
 import type {
   ChatDevice,
   ChatMessage,
@@ -36,36 +19,49 @@ import type {
   ModelMessage,
   RuntimeStatus,
   WorkerEvent,
-} from "@/lib/chat-types"
+} from "@/lib/chat-types";
+import {
+  buildCompactionSummarizeMessages,
+  buildSystemSummaryMessage,
+  chatMessagesToModelMessages,
+  clampCompactionSummary,
+  collectDroppedForContinue,
+  collectDroppedForRetry,
+  collectDroppedForSend,
+  pruneConversation,
+  serializeMessagesForSummary,
+  trimToCharBudget,
+  trimTurnWindow,
+} from "@/lib/context-compaction";
 
 type ChatStoreState = {
-  activeAssistantId: string | null
-  activeDevice: ChatDevice | null
-  activeRequestId: string | null
-  availableModels: ChatModelOption[]
-  composer: string
-  deviceProfile: DeviceProfile
-  error: string | null
-  hasLoadedModel: boolean
+  activeAssistantId: string | null;
+  activeDevice: ChatDevice | null;
+  activeRequestId: string | null;
+  availableModels: ChatModelOption[];
+  composer: string;
+  deviceProfile: DeviceProfile;
+  error: string | null;
+  hasLoadedModel: boolean;
   /** True while async context compaction/summarization runs before main generation. */
-  isCompactingContext: boolean
-  loadProgress: ModelLoadProgress | null
-  messages: ChatMessage[]
-  pendingStop: boolean
-  rollingContextSummary: string
-  runtimeStatus: RuntimeStatus
-  selectedModelId: ChatModelId
-  cancelModelLoad: () => void
-  clearChat: () => void
-  continueLastResponse: () => void
-  dismissError: () => void
-  initModel: () => void
-  retryLastTurn: () => void
-  sendMessage: (value?: string) => void
-  setComposer: (value: string) => void
-  setSelectedModel: (modelId: ChatModelId) => void
-  stopGeneration: () => void
-}
+  isCompactingContext: boolean;
+  loadProgress: ModelLoadProgress | null;
+  messages: ChatMessage[];
+  pendingStop: boolean;
+  rollingContextSummary: string;
+  runtimeStatus: RuntimeStatus;
+  selectedModelId: ChatModelId;
+  cancelModelLoad: () => void;
+  clearChat: () => void;
+  continueLastResponse: () => void;
+  dismissError: () => void;
+  initModel: () => void;
+  retryLastTurn: () => void;
+  sendMessage: (value?: string) => void;
+  setComposer: (value: string) => void;
+  setSelectedModel: (modelId: ChatModelId) => void;
+  stopGeneration: () => void;
+};
 
 type MutableChatState = Omit<
   ChatStoreState,
@@ -79,24 +75,24 @@ type MutableChatState = Omit<
   | "setComposer"
   | "setSelectedModel"
   | "stopGeneration"
->
+>;
 
 type CreateChatStoreOptions = {
-  deviceProfile?: DeviceProfile
-}
+  deviceProfile?: DeviceProfile;
+};
 
 function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID()
+    return crypto.randomUUID();
   }
 
-  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function createChatMessage(
   role: ChatMessage["role"],
   content: string,
-  state: ChatMessageState
+  state: ChatMessageState,
 ): ChatMessage {
   return {
     id: createId(),
@@ -104,34 +100,34 @@ function createChatMessage(
     content,
     createdAt: Date.now(),
     state,
-  }
+  };
 }
 
 export const CONTINUE_PROMPT =
-  "Continue your last response from where it stopped. Do not repeat prior text."
+  "Continue your last response from where it stopped. Do not repeat prior text.";
 
 function createInitialLoadProgress(modelId: ChatModelId): ModelLoadProgress {
   return {
     phase: "Warm up",
     progress: 0,
     detail: `Fetching ${getModelConfig(modelId).label} tokenizer and model shards...`,
-  }
+  };
 }
 
 function appendAssistantChunk(
   messages: ChatMessage[],
   activeAssistantId: string | null,
-  chunk: string
+  chunk: string,
 ): ChatMessage[] {
   if (!chunk) {
-    return messages
+    return messages;
   }
 
   if (!activeAssistantId) {
-    return [...messages, createChatMessage("assistant", chunk, "streaming")]
+    return [...messages, createChatMessage("assistant", chunk, "streaming")];
   }
 
-  const lastMessage = messages.at(-1)
+  const lastMessage = messages.at(-1);
   if (lastMessage?.id === activeAssistantId) {
     return [
       ...messages.slice(0, -1),
@@ -140,7 +136,7 @@ function appendAssistantChunk(
         content: `${lastMessage.content}${chunk}`,
         state: "streaming",
       },
-    ]
+    ];
   }
 
   return messages.map((message) =>
@@ -150,8 +146,8 @@ function appendAssistantChunk(
           content: `${message.content}${chunk}`,
           state: "streaming",
         }
-      : message
-  )
+      : message,
+  );
 }
 
 function finalizeAssistantMessage(
@@ -159,283 +155,288 @@ function finalizeAssistantMessage(
   activeAssistantId: string | null,
   nextState: ChatMessageState,
   finishReason?: FinishReason,
-  dropIfEmpty = false
+  dropIfEmpty = false,
 ): ChatMessage[] {
   if (!activeAssistantId) {
-    return messages
+    return messages;
   }
 
   return messages.flatMap((message) => {
     if (message.id !== activeAssistantId) {
-      return [message]
+      return [message];
     }
 
     if (dropIfEmpty && message.content.trim().length === 0) {
-      return []
+      return [];
     }
 
-    return [{ ...message, finishReason, state: nextState }]
-  })
+    return [{ ...message, finishReason, state: nextState }];
+  });
 }
 
 function markAssistantMessageStreaming(
   messages: ChatMessage[],
-  assistantId: string
+  assistantId: string,
 ): ChatMessage[] {
   return messages.map((message) =>
     message.id === assistantId
       ? { ...message, finishReason: undefined, state: "streaming" as const }
-      : message
-  )
+      : message,
+  );
 }
 
 function dropLastAssistantTurn(messages: ChatMessage[]) {
-  const nextMessages = [...messages]
+  const nextMessages = [...messages];
 
   while (nextMessages.at(-1)?.role === "assistant") {
-    nextMessages.pop()
+    nextMessages.pop();
   }
 
-  return nextMessages
+  return nextMessages;
 }
 
 type CompactionPayloadResult = {
-  compactionDroppedChars: number
-  compactionSummarizeMs: number
-  modelMessages: ModelMessage[]
-  rollingSummary: string
-}
+  compactionDroppedChars: number;
+  compactionSummarizeMs: number;
+  modelMessages: ModelMessage[];
+  rollingSummary: string;
+};
 
 async function runRollingSummaryGeneration(
   runtime: ChatRuntime,
   modelId: ChatModelId,
   priorSummary: string,
-  droppedMessages: ChatMessage[]
+  droppedMessages: ChatMessage[],
 ): Promise<{ ms: number; summary: string }> {
   if (droppedMessages.length === 0) {
-    return { ms: 0, summary: priorSummary }
+    return { ms: 0, summary: priorSummary };
   }
 
-  const transcript = serializeMessagesForSummary(droppedMessages)
+  const transcript = serializeMessagesForSummary(droppedMessages);
   const summarizeMessages = buildCompactionSummarizeMessages(
     priorSummary,
-    transcript
-  )
-  const requestId = `compact-${createId()}`
-  const compactionGeneration = getModelConfig(modelId).compactionSummarize
+    transcript,
+  );
+  const requestId = `compact-${createId()}`;
+  const compactionGeneration = getModelConfig(modelId).compactionSummarize;
   const startedAt =
-    typeof performance !== "undefined" ? performance.now() : Date.now()
+    typeof performance !== "undefined" ? performance.now() : Date.now();
 
   return new Promise((resolve) => {
-    let buffer = ""
+    let buffer = "";
     const unsub = runtime.subscribe((event) => {
       const eventRequestId =
         event.type === "token" || event.type === "complete"
           ? event.requestId
           : event.type === "error"
             ? event.requestId
-            : undefined
+            : undefined;
 
       if (eventRequestId !== requestId) {
-        return
+        return;
       }
 
       if (event.type === "token") {
-        buffer += event.text
-        return
+        buffer += event.text;
+        return;
       }
 
       if (event.type === "complete") {
-        unsub()
-        const merged = buffer.trim() || priorSummary
+        unsub();
+        const merged = buffer.trim() || priorSummary;
         resolve({
           ms:
             (typeof performance !== "undefined"
               ? performance.now()
               : Date.now()) - startedAt,
           summary: clampCompactionSummary(merged),
-        })
-        return
+        });
+        return;
       }
 
       if (event.type === "error") {
-        unsub()
+        unsub();
         resolve({
           ms:
             (typeof performance !== "undefined"
               ? performance.now()
               : Date.now()) - startedAt,
           summary: priorSummary,
-        })
+        });
       }
-    })
+    });
 
     runtime.generate(requestId, modelId, summarizeMessages, {
       generationOverrides: compactionGeneration,
-    })
-  })
+    });
+  });
 }
 
 async function buildCompactionPayloadForSend(args: {
-  baseMessages: ChatMessage[]
-  modelId: ChatModelId
-  priorRollingSummary: string
-  runtime: ChatRuntime
-  userMessage: ChatMessage
+  baseMessages: ChatMessage[];
+  modelId: ChatModelId;
+  priorRollingSummary: string;
+  runtime: ChatRuntime;
+  userMessage: ChatMessage;
 }): Promise<CompactionPayloadResult> {
   const { baseMessages, modelId, priorRollingSummary, runtime, userMessage } =
-    args
+    args;
 
-  const afterTurn = trimTurnWindow([...baseMessages, userMessage], modelId)
+  const afterTurn = trimTurnWindow([...baseMessages, userMessage], modelId);
 
   const allDropped = collectDroppedForSend(
     baseMessages,
     userMessage,
     modelId,
-    priorRollingSummary
-  )
+    priorRollingSummary,
+  );
   const compactionDroppedChars = allDropped.reduce(
     (total, message) => total + message.content.length,
-    0
-  )
+    0,
+  );
 
   const summarizeResult = await runRollingSummaryGeneration(
     runtime,
     modelId,
     priorRollingSummary,
-    allDropped
-  )
+    allDropped,
+  );
 
-  const nextRolling = summarizeResult.summary
+  const nextRolling = summarizeResult.summary;
 
-  const { budgetTrimmed } = trimToCharBudget(afterTurn, nextRolling, modelId)
+  const { budgetTrimmed } = trimToCharBudget(afterTurn, nextRolling, modelId);
 
-  const systemMessage = buildSystemSummaryMessage(nextRolling)
-  const core = chatMessagesToModelMessages(budgetTrimmed)
+  const systemMessage = buildSystemSummaryMessage(nextRolling);
+  const core = chatMessagesToModelMessages(budgetTrimmed);
 
-  const modelMessages = systemMessage ? [systemMessage, ...core] : core
+  const modelMessages = systemMessage ? [systemMessage, ...core] : core;
 
   return {
     compactionDroppedChars,
     compactionSummarizeMs: summarizeResult.ms,
     modelMessages,
     rollingSummary: nextRolling,
-  }
+  };
 }
 
 async function buildCompactionPayloadForRetry(args: {
-  history: ChatMessage[]
-  modelId: ChatModelId
-  priorRollingSummary: string
-  runtime: ChatRuntime
+  history: ChatMessage[];
+  modelId: ChatModelId;
+  priorRollingSummary: string;
+  runtime: ChatRuntime;
 }): Promise<CompactionPayloadResult> {
-  const { history, modelId, priorRollingSummary, runtime } = args
+  const { history, modelId, priorRollingSummary, runtime } = args;
 
-  const afterTurn = trimTurnWindow(history, modelId)
+  const afterTurn = trimTurnWindow(history, modelId);
 
-  const allDropped = collectDroppedForRetry(history, modelId, priorRollingSummary)
+  const allDropped = collectDroppedForRetry(
+    history,
+    modelId,
+    priorRollingSummary,
+  );
   const compactionDroppedChars = allDropped.reduce(
     (total, message) => total + message.content.length,
-    0
-  )
+    0,
+  );
 
   const summarizeResult = await runRollingSummaryGeneration(
     runtime,
     modelId,
     priorRollingSummary,
-    allDropped
-  )
+    allDropped,
+  );
 
-  const nextRolling = summarizeResult.summary
+  const nextRolling = summarizeResult.summary;
 
-  const { budgetTrimmed } = trimToCharBudget(afterTurn, nextRolling, modelId)
+  const { budgetTrimmed } = trimToCharBudget(afterTurn, nextRolling, modelId);
 
-  const systemMessage = buildSystemSummaryMessage(nextRolling)
-  const core = chatMessagesToModelMessages(budgetTrimmed)
+  const systemMessage = buildSystemSummaryMessage(nextRolling);
+  const core = chatMessagesToModelMessages(budgetTrimmed);
 
-  const modelMessages = systemMessage ? [systemMessage, ...core] : core
+  const modelMessages = systemMessage ? [systemMessage, ...core] : core;
 
   return {
     compactionDroppedChars,
     compactionSummarizeMs: summarizeResult.ms,
     modelMessages,
     rollingSummary: nextRolling,
-  }
+  };
 }
 
 async function buildCompactionPayloadForContinue(args: {
-  messages: ChatMessage[]
-  modelId: ChatModelId
-  priorRollingSummary: string
-  runtime: ChatRuntime
+  messages: ChatMessage[];
+  modelId: ChatModelId;
+  priorRollingSummary: string;
+  runtime: ChatRuntime;
 }): Promise<CompactionPayloadResult> {
-  const { messages, modelId, priorRollingSummary, runtime } = args
+  const { messages, modelId, priorRollingSummary, runtime } = args;
 
   const continueTail: ModelMessage[] = [
     { role: "user", content: CONTINUE_PROMPT },
-  ]
+  ];
 
-  const afterTurn = trimTurnWindow(messages, modelId)
+  const afterTurn = trimTurnWindow(messages, modelId);
 
   const allDropped = collectDroppedForContinue(
     messages,
     modelId,
     priorRollingSummary,
-    continueTail
-  )
+    continueTail,
+  );
   const compactionDroppedChars = allDropped.reduce(
     (total, message) => total + message.content.length,
-    0
-  )
+    0,
+  );
 
   const summarizeResult = await runRollingSummaryGeneration(
     runtime,
     modelId,
     priorRollingSummary,
-    allDropped
-  )
+    allDropped,
+  );
 
-  const nextRolling = summarizeResult.summary
+  const nextRolling = summarizeResult.summary;
 
   const { budgetTrimmed } = trimToCharBudget(
     afterTurn,
     nextRolling,
     modelId,
-    continueTail
-  )
+    continueTail,
+  );
 
-  const systemMessage = buildSystemSummaryMessage(nextRolling)
-  const core = chatMessagesToModelMessages(budgetTrimmed)
+  const systemMessage = buildSystemSummaryMessage(nextRolling);
+  const core = chatMessagesToModelMessages(budgetTrimmed);
 
   const modelMessages = [
     ...(systemMessage ? [systemMessage] : []),
     ...core,
     ...continueTail,
-  ]
+  ];
 
   return {
     compactionDroppedChars,
     compactionSummarizeMs: summarizeResult.ms,
     modelMessages,
     rollingSummary: nextRolling,
-  }
+  };
 }
 
 function getBusyStatus(hasLoadedModel: boolean): RuntimeStatus {
-  return hasLoadedModel ? "generating" : "loading-model"
+  return hasLoadedModel ? "generating" : "loading-model";
 }
 
 function getContinuableAssistantMessage(messages: ChatMessage[]) {
-  const lastMessage = messages.at(-1)
-  return lastMessage?.role === "assistant" && lastMessage.finishReason === "length"
+  const lastMessage = messages.at(-1);
+  return lastMessage?.role === "assistant" &&
+    lastMessage.finishReason === "length"
     ? lastMessage
-    : undefined
+    : undefined;
 }
 
 function createBaseState(
-  deviceProfile: DeviceProfile = getDeviceProfile()
+  deviceProfile: DeviceProfile = getDeviceProfile(),
 ): MutableChatState {
-  const selectedModelId = getRecommendedModelId(deviceProfile)
+  const selectedModelId = getRecommendedModelId(deviceProfile);
 
   return {
     activeAssistantId: null,
@@ -453,25 +454,25 @@ function createBaseState(
     runtimeStatus: "idle",
     selectedModelId,
     isCompactingContext: false,
-  }
+  };
 }
 
 function isModelSelectable(state: MutableChatState, modelId: ChatModelId) {
   return state.availableModels.some(
-    (model) => model.id === modelId && model.disabled === false
-  )
+    (model) => model.id === modelId && model.disabled === false,
+  );
 }
 
 export function createChatStore(
   runtime: ChatRuntime,
-  options: CreateChatStoreOptions = {}
+  options: CreateChatStoreOptions = {},
 ) {
-  const initialState = createBaseState(options.deviceProfile)
+  const initialState = createBaseState(options.deviceProfile);
 
   return createStore<ChatStoreState>((set, get) => ({
     ...initialState,
     clearChat: () => {
-      runtime.reset()
+      runtime.reset();
 
       set((state) => ({
         ...state,
@@ -484,34 +485,34 @@ export function createChatStore(
         rollingContextSummary: "",
         runtimeStatus: state.hasLoadedModel ? "ready" : "idle",
         isCompactingContext: false,
-      }))
+      }));
     },
     continueLastResponse: () => {
-      const state = get()
+      const state = get();
       if (
         state.runtimeStatus === "generating" ||
         state.runtimeStatus === "loading-model"
       ) {
-        return
+        return;
       }
 
-      const targetMessage = getContinuableAssistantMessage(state.messages)
+      const targetMessage = getContinuableAssistantMessage(state.messages);
       if (!targetMessage) {
-        return
+        return;
       }
 
-      const modelId = state.selectedModelId
+      const modelId = state.selectedModelId;
 
       const continueTailPreview: ModelMessage[] = [
         { role: "user", content: CONTINUE_PROMPT },
-      ]
+      ];
       const willRunCompactionSummarize =
         collectDroppedForContinue(
           state.messages,
           modelId,
           state.rollingContextSummary,
-          continueTailPreview
-        ).length > 0
+          continueTailPreview,
+        ).length > 0;
 
       set({
         activeAssistantId: targetMessage.id,
@@ -519,15 +520,15 @@ export function createChatStore(
         error: null,
         messages: markAssistantMessageStreaming(
           state.messages,
-          targetMessage.id
+          targetMessage.id,
         ),
         pendingStop: false,
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
-      })
+      });
 
       void (async () => {
         if (willRunCompactionSummarize) {
-          set({ isCompactingContext: true })
+          set({ isCompactingContext: true });
         }
         try {
           const payload = await buildCompactionPayloadForContinue({
@@ -535,18 +536,18 @@ export function createChatStore(
             modelId,
             priorRollingSummary: state.rollingContextSummary,
             runtime,
-          })
+          });
 
-          set({ rollingContextSummary: payload.rollingSummary })
+          set({ rollingContextSummary: payload.rollingSummary });
 
           runtime.generate(targetMessage.id, modelId, payload.modelMessages, {
             compactionDroppedChars: payload.compactionDroppedChars,
             compactionSummarizeMs: payload.compactionSummarizeMs,
-          })
+          });
         } finally {
-          set({ isCompactingContext: false })
+          set({ isCompactingContext: false });
         }
-      })()
+      })();
     },
     dismissError: () => {
       set((state) => ({
@@ -557,47 +558,48 @@ export function createChatStore(
             : state.hasLoadedModel
               ? "ready"
               : "idle",
-      }))
+      }));
     },
     initModel: () => {
-      const state = get()
+      const state = get();
       if (
         state.hasLoadedModel ||
         state.runtimeStatus === "loading-model" ||
         state.runtimeStatus === "generating"
       ) {
-        return
+        return;
       }
 
       set({
         error: null,
         loadProgress:
-          state.loadProgress ?? createInitialLoadProgress(state.selectedModelId),
+          state.loadProgress ??
+          createInitialLoadProgress(state.selectedModelId),
         runtimeStatus: "loading-model",
-      })
-      runtime.init(state.selectedModelId)
+      });
+      runtime.init(state.selectedModelId);
     },
     cancelModelLoad: () => {
-      const state = get()
+      const state = get();
       if (state.runtimeStatus !== "loading-model") {
-        return
+        return;
       }
 
-      let nextMessages = state.messages
-      let nextComposer = state.composer
-      const last = state.messages.at(-1)
-      const prev = state.messages.at(-2)
+      let nextMessages = state.messages;
+      let nextComposer = state.composer;
+      const last = state.messages.at(-1);
+      const prev = state.messages.at(-2);
       if (
         last?.role === "assistant" &&
         last.state === "streaming" &&
         prev?.role === "user"
       ) {
-        nextMessages = state.messages.slice(0, -2)
-        nextComposer = prev.content
+        nextMessages = state.messages.slice(0, -2);
+        nextComposer = prev.content;
       }
 
-      runtime.reset()
-      runtime.recreateWorker()
+      runtime.reset();
+      runtime.recreateWorker();
 
       set({
         activeAssistantId: null,
@@ -610,23 +612,23 @@ export function createChatStore(
         messages: nextMessages,
         pendingStop: false,
         runtimeStatus: "idle",
-      })
+      });
     },
     retryLastTurn: () => {
-      const state = get()
+      const state = get();
       if (
         state.runtimeStatus === "generating" ||
         state.runtimeStatus === "loading-model"
       ) {
-        return
+        return;
       }
 
-      const history = dropLastAssistantTurn(pruneConversation(state.messages))
+      const history = dropLastAssistantTurn(pruneConversation(state.messages));
       if (history.at(-1)?.role !== "user") {
-        return
+        return;
       }
 
-      const assistantMessage = createChatMessage("assistant", "", "streaming")
+      const assistantMessage = createChatMessage("assistant", "", "streaming");
 
       set({
         activeAssistantId: assistantMessage.id,
@@ -635,24 +637,21 @@ export function createChatStore(
         loadProgress: state.hasLoadedModel
           ? state.loadProgress
           : (state.loadProgress ??
-              createInitialLoadProgress(state.selectedModelId)),
+            createInitialLoadProgress(state.selectedModelId)),
         messages: [...history, assistantMessage],
         pendingStop: false,
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
-      })
+      });
 
-      const modelId = state.selectedModelId
+      const modelId = state.selectedModelId;
 
       const willRunCompactionSummarize =
-        collectDroppedForRetry(
-          history,
-          modelId,
-          state.rollingContextSummary
-        ).length > 0
+        collectDroppedForRetry(history, modelId, state.rollingContextSummary)
+          .length > 0;
 
       void (async () => {
         if (willRunCompactionSummarize) {
-          set({ isCompactingContext: true })
+          set({ isCompactingContext: true });
         }
         try {
           const payload = await buildCompactionPayloadForRetry({
@@ -660,47 +659,52 @@ export function createChatStore(
             modelId,
             priorRollingSummary: state.rollingContextSummary,
             runtime,
-          })
+          });
 
-          set({ rollingContextSummary: payload.rollingSummary })
+          set({ rollingContextSummary: payload.rollingSummary });
 
-          runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
-            compactionDroppedChars: payload.compactionDroppedChars,
-            compactionSummarizeMs: payload.compactionSummarizeMs,
-          })
+          runtime.generate(
+            assistantMessage.id,
+            modelId,
+            payload.modelMessages,
+            {
+              compactionDroppedChars: payload.compactionDroppedChars,
+              compactionSummarizeMs: payload.compactionSummarizeMs,
+            },
+          );
         } finally {
-          set({ isCompactingContext: false })
+          set({ isCompactingContext: false });
         }
-      })()
+      })();
     },
     sendMessage: (value) => {
-      const state = get()
+      const state = get();
       if (
         state.runtimeStatus === "generating" ||
         state.runtimeStatus === "loading-model"
       ) {
-        return
+        return;
       }
 
-      const nextComposer = (value ?? state.composer).trim()
+      const nextComposer = (value ?? state.composer).trim();
       if (!nextComposer) {
-        return
+        return;
       }
 
-      const baseMessages = pruneConversation(state.messages)
-      const userMessage = createChatMessage("user", nextComposer, "done")
-      const assistantMessage = createChatMessage("assistant", "", "streaming")
-      const nextMessages = [...baseMessages, userMessage, assistantMessage]
+      const baseMessages = pruneConversation(state.messages);
+      const userMessage = createChatMessage("user", nextComposer, "done");
+      const assistantMessage = createChatMessage("assistant", "", "streaming");
+      const nextMessages = [...baseMessages, userMessage, assistantMessage];
 
-      const modelId = state.selectedModelId
+      const modelId = state.selectedModelId;
 
       const willRunCompactionSummarize =
         collectDroppedForSend(
           baseMessages,
           userMessage,
           modelId,
-          state.rollingContextSummary
-        ).length > 0
+          state.rollingContextSummary,
+        ).length > 0;
 
       set({
         activeAssistantId: assistantMessage.id,
@@ -710,15 +714,15 @@ export function createChatStore(
         loadProgress: state.hasLoadedModel
           ? state.loadProgress
           : (state.loadProgress ??
-              createInitialLoadProgress(state.selectedModelId)),
+            createInitialLoadProgress(state.selectedModelId)),
         messages: nextMessages,
         pendingStop: false,
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
-      })
+      });
 
       void (async () => {
         if (willRunCompactionSummarize) {
-          set({ isCompactingContext: true })
+          set({ isCompactingContext: true });
         }
         try {
           const payload = await buildCompactionPayloadForSend({
@@ -727,62 +731,67 @@ export function createChatStore(
             priorRollingSummary: state.rollingContextSummary,
             runtime,
             userMessage,
-          })
+          });
 
-          set({ rollingContextSummary: payload.rollingSummary })
+          set({ rollingContextSummary: payload.rollingSummary });
 
-          runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
-            compactionDroppedChars: payload.compactionDroppedChars,
-            compactionSummarizeMs: payload.compactionSummarizeMs,
-          })
+          runtime.generate(
+            assistantMessage.id,
+            modelId,
+            payload.modelMessages,
+            {
+              compactionDroppedChars: payload.compactionDroppedChars,
+              compactionSummarizeMs: payload.compactionSummarizeMs,
+            },
+          );
         } finally {
-          set({ isCompactingContext: false })
+          set({ isCompactingContext: false });
         }
-      })()
+      })();
     },
     setComposer: (value) => {
-      set({ composer: value })
+      set({ composer: value });
     },
     setSelectedModel: (modelId) => {
-      const state = get()
+      const state = get();
       if (
         state.selectedModelId === modelId ||
         !isModelSelectable(state, modelId)
       ) {
-        return
+        return;
       }
 
       if (state.runtimeStatus === "generating") {
-        runtime.stop()
+        runtime.stop();
       }
 
-      runtime.reset()
-      runtime.recreateWorker()
+      runtime.reset();
+      runtime.recreateWorker();
 
       set((currentState) => {
-        let nextMessages = currentState.messages
+        let nextMessages = currentState.messages;
         if (currentState.activeAssistantId !== null) {
           nextMessages = finalizeAssistantMessage(
             nextMessages,
             currentState.activeAssistantId,
             "done",
             "stopped",
-            true
-          )
+            true,
+          );
         }
 
         const nextRollingSummary = clampCompactionSummary(
-          currentState.rollingContextSummary
-        )
+          currentState.rollingContextSummary,
+        );
         const afterTurn = trimTurnWindow(
           pruneConversation(nextMessages),
-          modelId
-        )
+          modelId,
+        );
         const { budgetTrimmed } = trimToCharBudget(
           afterTurn,
           nextRollingSummary,
-          modelId
-        )
+          modelId,
+        );
 
         return {
           ...currentState,
@@ -799,54 +808,54 @@ export function createChatStore(
           runtimeStatus: "idle",
           selectedModelId: modelId,
           isCompactingContext: false,
-        }
-      })
+        };
+      });
     },
     stopGeneration: () => {
       if (get().runtimeStatus !== "generating") {
-        return
+        return;
       }
 
-      set({ pendingStop: true })
-      runtime.stop()
+      set({ pendingStop: true });
+      runtime.stop();
     },
-  }))
+  }));
 }
 
 function eventTargetsSelectedModel(
   state: ChatStoreState,
-  event: WorkerEvent
+  event: WorkerEvent,
 ): boolean {
-  return event.modelId === undefined || event.modelId === state.selectedModelId
+  return event.modelId === undefined || event.modelId === state.selectedModelId;
 }
 
 export function applyWorkerEvent(
   store: StoreApi<ChatStoreState>,
-  event: WorkerEvent
+  event: WorkerEvent,
 ) {
   switch (event.type) {
     case "progress": {
       store.setState((state) => {
         if (!eventTargetsSelectedModel(state, event)) {
-          return state
+          return state;
         }
 
         return {
           error: null,
           loadProgress: event.progress,
           runtimeStatus: "loading-model" as const,
-        }
-      })
-      return
+        };
+      });
+      return;
     }
 
     case "ready": {
       store.setState((state) => {
         if (!eventTargetsSelectedModel(state, event)) {
-          return state
+          return state;
         }
 
-        const model = getModelConfig(event.modelId)
+        const model = getModelConfig(event.modelId);
 
         return {
           activeDevice: event.device,
@@ -858,9 +867,9 @@ export function applyWorkerEvent(
             detail: `${model.label} is loaded on ${event.device.toUpperCase()}.`,
           },
           runtimeStatus: state.activeAssistantId ? "generating" : "ready",
-        }
-      })
-      return
+        };
+      });
+      return;
     }
 
     case "token": {
@@ -870,7 +879,7 @@ export function applyWorkerEvent(
           (state.activeRequestId !== null &&
             state.activeRequestId !== event.requestId)
         ) {
-          return state
+          return state;
         }
 
         return {
@@ -878,12 +887,12 @@ export function applyWorkerEvent(
           messages: appendAssistantChunk(
             state.messages,
             state.activeAssistantId,
-            event.text
+            event.text,
           ),
           runtimeStatus: "generating" as const,
-        }
-      })
-      return
+        };
+      });
+      return;
     }
 
     case "complete": {
@@ -893,7 +902,7 @@ export function applyWorkerEvent(
           (state.activeRequestId !== null &&
             state.activeRequestId !== event.requestId)
         ) {
-          return state
+          return state;
         }
 
         return {
@@ -905,23 +914,23 @@ export function applyWorkerEvent(
             state.activeAssistantId,
             "done",
             event.finishReason,
-            event.finishReason === "stopped"
+            event.finishReason === "stopped",
           ),
           pendingStop: false,
           runtimeStatus: state.hasLoadedModel ? "ready" : "idle",
-        }
-      })
-      return
+        };
+      });
+      return;
     }
 
     case "error": {
       store.setState((state) => {
         if (!eventTargetsSelectedModel(state, event)) {
-          return state
+          return state;
         }
 
         const shouldHandleActiveRequest =
-          !event.requestId || state.activeRequestId === event.requestId
+          !event.requestId || state.activeRequestId === event.requestId;
 
         return {
           activeAssistantId: shouldHandleActiveRequest
@@ -935,34 +944,34 @@ export function applyWorkerEvent(
             ? finalizeAssistantMessage(
                 state.messages,
                 state.activeAssistantId,
-                "error"
+                "error",
               )
             : state.messages,
           pendingStop: false,
           runtimeStatus: "error",
-        }
-      })
+        };
+      });
     }
   }
 }
 
 export function bindChatRuntime(
   store: StoreApi<ChatStoreState>,
-  runtime: ChatRuntime
+  runtime: ChatRuntime,
 ) {
   return runtime.subscribe((event) => {
-    applyWorkerEvent(store, event)
-  })
+    applyWorkerEvent(store, event);
+  });
 }
 
-const runtime = getDefaultChatRuntime()
+const runtime = getDefaultChatRuntime();
 
-export const chatStore = createChatStore(runtime)
+export const chatStore = createChatStore(runtime);
 
-bindChatRuntime(chatStore, runtime)
+bindChatRuntime(chatStore, runtime);
 
 export function useChatStore<T>(selector: (state: ChatStoreState) => T) {
-  return useStore(chatStore, selector)
+  return useStore(chatStore, selector);
 }
 
-export type { ChatStoreState }
+export type { ChatStoreState };

@@ -1,28 +1,22 @@
-import type { ReactNode } from "react"
-import { ArrowLeftIcon, FlaskIcon } from "@phosphor-icons/react"
-import { Link } from "react-router-dom"
+import { ArrowLeftIcon, FlaskIcon } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import {
   HostedVsLocalDiagram,
   RuntimeArchitectureDiagram,
-} from "@/components/about/architecture-diagrams"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { buttonVariants } from "@/components/ui/button"
+} from "@/components/about/architecture-diagrams";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DEFAULT_MODEL_ID,
   getModelConfig,
   getRecommendedModelId,
-} from "@/lib/chat-config"
-import { PROJECT_AUTHOR, PROJECT_REPO_URL } from "@/lib/site-meta"
-import { cn } from "@/lib/utils"
+} from "@/lib/chat-config";
+import { PROJECT_AUTHOR, PROJECT_REPO_URL } from "@/lib/site-meta";
+import { cn } from "@/lib/utils";
 
-function Section({
-  children,
-  title,
-}: {
-  children: ReactNode
-  title: string
-}) {
+function Section({ children, title }: { children: ReactNode; title: string }) {
   return (
     <section className="space-y-4">
       <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
@@ -32,13 +26,13 @@ function Section({
         {children}
       </div>
     </section>
-  )
+  );
 }
 
 export default function AboutPage() {
-  const constrainedId = getRecommendedModelId("constrained")
-  const standardModel = getModelConfig(DEFAULT_MODEL_ID)
-  const constrainedModel = getModelConfig(constrainedId)
+  const constrainedId = getRecommendedModelId("constrained");
+  const standardModel = getModelConfig(DEFAULT_MODEL_ID);
+  const constrainedModel = getModelConfig(constrainedId);
 
   return (
     <div className="min-h-svh bg-background text-foreground">
@@ -50,7 +44,7 @@ export default function AboutPage() {
                 className: "gap-1.5 border-border bg-card hover:bg-accent",
                 size: "sm",
                 variant: "outline",
-              })
+              }),
             )}
             to="/"
           >
@@ -152,8 +146,8 @@ export default function AboutPage() {
               .
             </li>
             <li>
-              <strong>Ephemeral transcript</strong> — Messages are kept in memory
-              for the session; refreshing or closing the tab clears them.
+              <strong>Ephemeral transcript</strong> — Messages are kept in
+              memory for the session; refreshing or closing the tab clears them.
             </li>
           </ul>
           <RuntimeArchitectureDiagram />
@@ -169,9 +163,9 @@ export default function AboutPage() {
             disabled on constrained profiles to reduce unstable loads.
           </p>
           <p>
-            Current defaults: <strong>{standardModel.label}</strong> on
-            standard devices, <strong>{constrainedModel.label}</strong> on
-            constrained devices. Full labels and Hugging Face repo IDs live in{" "}
+            Current defaults: <strong>{standardModel.label}</strong> on standard
+            devices, <strong>{constrainedModel.label}</strong> on constrained
+            devices. Full labels and Hugging Face repo IDs live in{" "}
             <code className="rounded-none bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground sm:text-[0.8125rem]">
               src/lib/chat-config.ts
             </code>{" "}
@@ -180,5 +174,5 @@ export default function AboutPage() {
         </Section>
       </main>
     </div>
-  )
+  );
 }

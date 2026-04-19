@@ -4,7 +4,7 @@ import type {
   ChatModelId,
   ChatModelOption,
   DeviceProfile,
-} from "@/lib/chat-types"
+} from "@/lib/chat-types";
 
 const COMPACTION_SUMMARIZE_PRESET: ChatGenerationConfig = {
   do_sample: true,
@@ -13,15 +13,16 @@ const COMPACTION_SUMMARIZE_PRESET: ChatGenerationConfig = {
   return_full_text: false,
   temperature: 0.35,
   top_p: 0.85,
-}
+};
 
 type NavigatorWithDeviceMemory = Navigator & {
-  deviceMemory?: number
-}
+  deviceMemory?: number;
+};
 
 const desktopModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
-  description: "Balanced default for most devices with solid local chat quality.",
+  description:
+    "Balanced default for most devices with solid local chat quality.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -39,7 +40,7 @@ const desktopModel: ChatModelConfig = {
   shortLabel: "350M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const desktopModelLfm25: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -62,7 +63,7 @@ const desktopModelLfm25: ChatModelConfig = {
   shortLabel: "2.5 350M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const desktopQualityModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -84,11 +85,12 @@ const desktopQualityModel: ChatModelConfig = {
   shortLabel: "700M",
   supportsDesktop: true,
   supportsMobile: false,
-}
+};
 
 const desktopExperimentalModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
-  description: "Strongest local desktop option in the current Bumblebee catalog.",
+  description:
+    "Strongest local desktop option in the current Bumblebee catalog.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -106,7 +108,7 @@ const desktopExperimentalModel: ChatModelConfig = {
   shortLabel: "1.2B",
   supportsDesktop: true,
   supportsMobile: false,
-}
+};
 
 const smallQualityModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -128,11 +130,12 @@ const smallQualityModel: ChatModelConfig = {
   shortLabel: "360M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const mobileModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
-  description: "Safest mobile option and the fastest lightweight starting point.",
+  description:
+    "Safest mobile option and the fastest lightweight starting point.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -150,11 +153,12 @@ const mobileModel: ChatModelConfig = {
   shortLabel: "135M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const compactGeneralModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
-  description: "Stronger all-around small chat model while staying browser friendly.",
+  description:
+    "Stronger all-around small chat model while staying browser friendly.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -172,7 +176,7 @@ const compactGeneralModel: ChatModelConfig = {
   shortLabel: "0.5B",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const gemma3_270mModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -195,7 +199,7 @@ const gemma3_270mModel: ChatModelConfig = {
   shortLabel: "Gemma270M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const qwen3_0_6bModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -218,7 +222,7 @@ const qwen3_0_6bModel: ChatModelConfig = {
   shortLabel: "Qwen3",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const falconH1TinyModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -241,7 +245,7 @@ const falconH1TinyModel: ChatModelConfig = {
   shortLabel: "Falcon90M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const falconH1TinyMultilingualModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -264,7 +268,7 @@ const falconH1TinyMultilingualModel: ChatModelConfig = {
   shortLabel: "Falcon100M",
   supportsDesktop: true,
   supportsMobile: true,
-}
+};
 
 const llama32_1bModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -287,7 +291,7 @@ const llama32_1bModel: ChatModelConfig = {
   shortLabel: "Llama1B",
   supportsDesktop: true,
   supportsMobile: false,
-}
+};
 
 const gemma3_1bModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -309,7 +313,7 @@ const gemma3_1bModel: ChatModelConfig = {
   shortLabel: "Gemma1B",
   supportsDesktop: true,
   supportsMobile: false,
-}
+};
 
 const tinySwallowModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -331,7 +335,7 @@ const tinySwallowModel: ChatModelConfig = {
   shortLabel: "Swallow",
   supportsDesktop: true,
   supportsMobile: false,
-}
+};
 
 const bonsaiModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
@@ -354,7 +358,7 @@ const bonsaiModel: ChatModelConfig = {
   shortLabel: "Bonsai",
   supportsDesktop: true,
   supportsMobile: false,
-}
+};
 
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "smollm2-135m": mobileModel,
@@ -372,9 +376,9 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "lfm2-1.2b": desktopExperimentalModel,
   "tinyswallow-1.5b-instruct": tinySwallowModel,
   "bonsai-1.7b": bonsaiModel,
-}
+};
 
-export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-5-350m"
+export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-5-350m";
 
 export const CHAT_COPY = {
   subtitle:
@@ -383,10 +387,10 @@ export const CHAT_COPY = {
     "First run downloads the tokenizer and weights from Hugging Face, then the browser cache handles repeat visits.",
   footnote:
     "Bumblebee defaults to Falcon H1 Tiny 90M on mobile and other constrained devices to reduce browser crashes.",
-} as const
+} as const;
 
 export function getModelConfig(modelId: ChatModelId) {
-  return CHAT_MODELS[modelId]
+  return CHAT_MODELS[modelId];
 }
 
 const PROVIDER_GROUP_ORDER = [
@@ -398,7 +402,7 @@ const PROVIDER_GROUP_ORDER = [
   "Llama",
   "TinySwallow",
   "Bonsai",
-] as const
+] as const;
 
 const PROVIDER_GROUP_DESCRIPTIONS = {
   Bonsai: "Higher-capacity models aimed at desktop-class quality.",
@@ -411,64 +415,64 @@ const PROVIDER_GROUP_DESCRIPTIONS = {
   SmolLM: "Light Hugging Face instruction models for fast on-device replies.",
   TinySwallow:
     "Swallow-family instruct models with Japanese and English support.",
-} as const satisfies Record<(typeof PROVIDER_GROUP_ORDER)[number], string>
+} as const satisfies Record<(typeof PROVIDER_GROUP_ORDER)[number], string>;
 
 export function getProviderGroupDescription(providerGroup: string): string {
   if (providerGroup in PROVIDER_GROUP_DESCRIPTIONS) {
     return PROVIDER_GROUP_DESCRIPTIONS[
       providerGroup as keyof typeof PROVIDER_GROUP_DESCRIPTIONS
-    ]
+    ];
   }
-  return ""
+  return "";
 }
 
 export function getModelProviderGroup(id: ChatModelId): string {
   switch (id) {
     case "bonsai-1.7b":
-      return "Bonsai"
+      return "Bonsai";
     case "falcon-h1-tiny-90m-instruct":
     case "falcon-h1-tiny-multilingual-100m-instruct":
-      return "Falcon"
+      return "Falcon";
     case "gemma-3-1b-it":
     case "gemma-3-270m-it":
-      return "Gemma"
+      return "Gemma";
     case "lfm2-1.2b":
     case "lfm2-350m":
     case "lfm2-5-350m":
     case "lfm2-700m":
-      return "LFM"
+      return "LFM";
     case "llama-3.2-1b-instruct":
-      return "Llama"
+      return "Llama";
     case "qwen2.5-0.5b":
     case "qwen3-0.6b":
-      return "Qwen"
+      return "Qwen";
     case "smollm2-135m":
     case "smollm2-360m":
-      return "SmolLM"
+      return "SmolLM";
     case "tinyswallow-1.5b-instruct":
-      return "TinySwallow"
+      return "TinySwallow";
   }
 }
 
 export function groupChatModelsByProvider(
-  models: ChatModelOption[]
+  models: ChatModelOption[],
 ): Array<{ providerGroup: string; models: ChatModelOption[] }> {
-  const buckets = new Map<string, ChatModelOption[]>()
+  const buckets = new Map<string, ChatModelOption[]>();
   for (const model of models) {
-    const list = buckets.get(model.providerGroup)
+    const list = buckets.get(model.providerGroup);
     if (list) {
-      list.push(model)
+      list.push(model);
     } else {
-      buckets.set(model.providerGroup, [model])
+      buckets.set(model.providerGroup, [model]);
     }
   }
 
   const ordered: Array<{ providerGroup: string; models: ChatModelOption[] }> =
-    []
+    [];
   for (const name of PROVIDER_GROUP_ORDER) {
-    const groupModels = buckets.get(name)
+    const groupModels = buckets.get(name);
     if (groupModels?.length) {
-      ordered.push({ providerGroup: name, models: groupModels })
+      ordered.push({ providerGroup: name, models: groupModels });
     }
   }
   for (const [providerGroup, groupModels] of buckets) {
@@ -476,14 +480,14 @@ export function groupChatModelsByProvider(
       !(PROVIDER_GROUP_ORDER as readonly string[]).includes(providerGroup) &&
       groupModels.length > 0
     ) {
-      ordered.push({ providerGroup, models: groupModels })
+      ordered.push({ providerGroup, models: groupModels });
     }
   }
-  return ordered
+  return ordered;
 }
 
 export function getModelOptions(
-  profile: DeviceProfile
+  profile: DeviceProfile,
 ): Array<ChatModelOption> {
   return Object.values(CHAT_MODELS).map((model) => ({
     description:
@@ -497,67 +501,68 @@ export function getModelOptions(
     shortLabel: model.shortLabel,
     supportsDesktop: model.supportsDesktop,
     supportsMobile: model.supportsMobile,
-  }))
+  }));
 }
 
 export function getRecommendedModelId(profile: DeviceProfile): ChatModelId {
   return profile === "constrained"
     ? "falcon-h1-tiny-90m-instruct"
-    : DEFAULT_MODEL_ID
+    : DEFAULT_MODEL_ID;
 }
 
 export function getDeviceProfile(
   targetNavigator: Navigator | undefined = typeof navigator !== "undefined"
     ? navigator
-    : undefined
+    : undefined,
 ): DeviceProfile {
   if (!targetNavigator) {
-    return "standard"
+    return "standard";
   }
 
-  const userAgent = targetNavigator.userAgent ?? ""
-  const platform = targetNavigator.platform ?? ""
-  const maxTouchPoints = targetNavigator.maxTouchPoints ?? 0
-  const deviceMemory = (targetNavigator as NavigatorWithDeviceMemory).deviceMemory
+  const userAgent = targetNavigator.userAgent ?? "";
+  const platform = targetNavigator.platform ?? "";
+  const maxTouchPoints = targetNavigator.maxTouchPoints ?? 0;
+  const deviceMemory = (targetNavigator as NavigatorWithDeviceMemory)
+    .deviceMemory;
 
-  const isIosDevice = /iPhone|iPad|iPod/i.test(userAgent)
-  const isTouchMac = platform === "MacIntel" && maxTouchPoints > 1
+  const isIosDevice = /iPhone|iPad|iPod/i.test(userAgent);
+  const isTouchMac = platform === "MacIntel" && maxTouchPoints > 1;
   const isMobileDevice =
     /Android|webOS|BlackBerry|Opera Mini|IEMobile|Mobile/i.test(userAgent) ||
     isIosDevice ||
-    isTouchMac
+    isTouchMac;
   const isLowMemoryDevice =
-    typeof deviceMemory === "number" && deviceMemory <= 4
+    typeof deviceMemory === "number" && deviceMemory <= 4;
 
-  return isMobileDevice || isLowMemoryDevice ? "constrained" : "standard"
+  return isMobileDevice || isLowMemoryDevice ? "constrained" : "standard";
 }
 
 export function formatBytes(value?: number) {
   if (value === undefined || Number.isNaN(value)) {
-    return null
+    return null;
   }
 
   if (value < 1024) {
-    return `${value} B`
+    return `${value} B`;
   }
 
-  const units = ["KB", "MB", "GB"]
-  let size = value / 1024
-  let unitIndex = 0
+  const units = ["KB", "MB", "GB"];
+  let size = value / 1024;
+  let unitIndex = 0;
 
   while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
+    size /= 1024;
+    unitIndex += 1;
   }
 
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 export function formatPercent(value?: number | null) {
   if (value === undefined || value === null || Number.isNaN(value)) {
-    return null
+    return null;
   }
 
-  const normalized = Math.max(0, Math.min(100, value))
-  return `${Math.round(normalized)}%`
+  const normalized = Math.max(0, Math.min(100, value));
+  return `${Math.round(normalized)}%`;
 }

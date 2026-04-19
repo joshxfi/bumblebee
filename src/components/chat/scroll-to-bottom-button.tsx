@@ -1,12 +1,12 @@
-import { ArrowDownIcon } from "@phosphor-icons/react"
+import { ArrowDownIcon } from "@phosphor-icons/react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 
 type ScrollToBottomButtonProps = {
-  onScrollToBottom: () => void
-  offsetClassName: string
-  visible: boolean
-}
+  onScrollToBottom: () => void;
+  offsetClassName: string;
+  visible: boolean;
+};
 
 export function ScrollToBottomButton({
   onScrollToBottom,
@@ -14,7 +14,7 @@ export function ScrollToBottomButton({
   visible,
 }: ScrollToBottomButtonProps) {
   if (!visible) {
-    return null
+    return null;
   }
 
   return (
@@ -33,5 +33,5 @@ export function ScrollToBottomButton({
         </Button>
       </div>
     </div>
-  )
+  );
 }
