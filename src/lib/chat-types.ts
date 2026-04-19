@@ -27,19 +27,26 @@ export type RuntimeStatus =
   | "error"
 export type ChatDevice = "webgpu" | "wasm"
 
+export type ChatGenerationConfig = {
+  do_sample: boolean
+  max_new_tokens: number
+  repetition_penalty: number
+  return_full_text: false
+  temperature: number
+  top_p: number
+}
+
+export type ChatGenerationOverrides = Partial<ChatGenerationConfig>
+
 export type ChatModelConfig = {
+  compactionSummarize: ChatGenerationConfig
   description: string
   dtype: ChatModelDtype
-  generation: {
-    do_sample: boolean
-    max_new_tokens: number
-    repetition_penalty: number
-    return_full_text: false
-    temperature: number
-    top_p: number
-  }
+  generation: ChatGenerationConfig
   historyTurns: number
   id: ChatModelId
+  /** Rough cap on prompt characters (messages + injected system summary) sent to the model. */
+  maxPromptChars: number
   label: string
   modelId: string
   shortLabel: string
@@ -82,6 +89,8 @@ export type ModelLoadProgress = {
 }
 
 export type ChatPerfSample = {
+  compactionDroppedChars?: number
+  compactionSummarizeMs?: number
   completionMs?: number
   device?: ChatDevice
   firstTokenMs?: number
@@ -99,6 +108,7 @@ export type WorkerRequest =
   | { type: "init"; modelId: ChatModelId }
   | {
       type: "generate"
+      generationOverrides?: ChatGenerationOverrides
       modelId: ChatModelId
       requestId: string
       messages: ModelMessage[]

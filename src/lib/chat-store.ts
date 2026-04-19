@@ -11,6 +11,17 @@ import {
   getModelOptions,
   getRecommendedModelId,
 } from "@/lib/chat-config"
+import {
+  buildCompactionSummarizeMessages,
+  buildSystemSummaryMessage,
+  chatMessagesToModelMessages,
+  clampCompactionSummary,
+  mergeDroppedMessages,
+  pruneConversation,
+  serializeMessagesForSummary,
+  trimToCharBudget,
+  trimTurnWindow,
+} from "@/lib/context-compaction"
 import type {
   ChatDevice,
   ChatMessage,
@@ -37,6 +48,7 @@ type ChatStoreState = {
   loadProgress: ModelLoadProgress | null
   messages: ChatMessage[]
   pendingStop: boolean
+  rollingContextSummary: string
   runtimeStatus: RuntimeStatus
   selectedModelId: ChatModelId
   cancelModelLoad: () => void
@@ -173,16 +185,6 @@ function markAssistantMessageStreaming(
   )
 }
 
-function pruneConversation(messages: ChatMessage[]) {
-  return messages.filter((message) => {
-    if (message.role !== "assistant") {
-      return true
-    }
-
-    return message.content.trim().length > 0 && message.state !== "error"
-  })
-}
-
 function dropLastAssistantTurn(messages: ChatMessage[]) {
   const nextMessages = [...messages]
 
@@ -200,42 +202,232 @@ function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
   }))
 }
 
-function trimMessagesForModel(
-  messages: ChatMessage[],
-  modelId: ChatModelId
-): ChatMessage[] {
-  const visibleMessages = pruneConversation(messages)
-  const historyTurns = getModelConfig(modelId).historyTurns
-
-  let userTurns = 0
-  let startIndex = 0
-
-  for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
-    if (visibleMessages[index]?.role === "user") {
-      userTurns += 1
-
-      if (userTurns > historyTurns) {
-        startIndex = index + 1
-        break
-      }
-    }
-  }
-
-  while (visibleMessages[startIndex]?.role === "assistant") {
-    startIndex += 1
-  }
-
-  return visibleMessages.slice(startIndex)
+type CompactionPayloadResult = {
+  compactionDroppedChars: number
+  compactionSummarizeMs: number
+  modelMessages: ModelMessage[]
+  rollingSummary: string
 }
 
-function toModelMessagesForModel(
-  messages: ChatMessage[],
+async function runRollingSummaryGeneration(
+  runtime: ChatRuntime,
+  modelId: ChatModelId,
+  priorSummary: string,
+  droppedMessages: ChatMessage[]
+): Promise<{ ms: number; summary: string }> {
+  if (droppedMessages.length === 0) {
+    return { ms: 0, summary: priorSummary }
+  }
+
+  const transcript = serializeMessagesForSummary(droppedMessages)
+  const summarizeMessages = buildCompactionSummarizeMessages(
+    priorSummary,
+    transcript
+  )
+  const requestId = `compact-${createId()}`
+  const compactionGeneration = getModelConfig(modelId).compactionSummarize
+  const startedAt =
+    typeof performance !== "undefined" ? performance.now() : Date.now()
+
+  return new Promise((resolve) => {
+    let buffer = ""
+    const unsub = runtime.subscribe((event) => {
+      if (event.requestId !== requestId) {
+        return
+      }
+
+      if (event.type === "token") {
+        buffer += event.text
+        return
+      }
+
+      if (event.type === "complete") {
+        unsub()
+        const merged = buffer.trim() || priorSummary
+        resolve({
+          ms:
+            (typeof performance !== "undefined"
+              ? performance.now()
+              : Date.now()) - startedAt,
+          summary: clampCompactionSummary(merged),
+        })
+        return
+      }
+
+      if (event.type === "error") {
+        unsub()
+        resolve({
+          ms:
+            (typeof performance !== "undefined"
+              ? performance.now()
+              : Date.now()) - startedAt,
+          summary: priorSummary,
+        })
+      }
+    })
+
+    runtime.generate(requestId, modelId, summarizeMessages, {
+      generationOverrides: compactionGeneration,
+    })
+  })
+}
+
+async function buildCompactionPayloadForSend(args: {
+  baseMessages: ChatMessage[]
   modelId: ChatModelId
-): ModelMessage[] {
-  return trimMessagesForModel(messages, modelId).map(({ role, content }) => ({
-    role,
-    content,
-  }))
+  priorRollingSummary: string
+  runtime: ChatRuntime
+  userMessage: ChatMessage
+}): Promise<CompactionPayloadResult> {
+  const { baseMessages, modelId, priorRollingSummary, runtime, userMessage } =
+    args
+
+  const afterTurn = trimTurnWindow([...baseMessages, userMessage], modelId)
+  const beforeTurn = trimTurnWindow(baseMessages, modelId)
+  const afterIds = new Set(afterTurn.map((message) => message.id))
+
+  const dropTurn = beforeTurn.filter((message) => !afterIds.has(message.id))
+
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    priorRollingSummary,
+    modelId
+  )
+
+  const allDropped = mergeDroppedMessages(dropTurn, droppedFromBudget)
+  const compactionDroppedChars = allDropped.reduce(
+    (total, message) => total + message.content.length,
+    0
+  )
+
+  const summarizeResult = await runRollingSummaryGeneration(
+    runtime,
+    modelId,
+    priorRollingSummary,
+    allDropped
+  )
+
+  const nextRolling = summarizeResult.summary
+
+  const { budgetTrimmed } = trimToCharBudget(afterTurn, nextRolling, modelId)
+
+  const systemMessage = buildSystemSummaryMessage(nextRolling)
+  const core = chatMessagesToModelMessages(budgetTrimmed)
+
+  const modelMessages = systemMessage ? [systemMessage, ...core] : core
+
+  return {
+    compactionDroppedChars,
+    compactionSummarizeMs: summarizeResult.ms,
+    modelMessages,
+    rollingSummary: nextRolling,
+  }
+}
+
+async function buildCompactionPayloadForRetry(args: {
+  history: ChatMessage[]
+  modelId: ChatModelId
+  priorRollingSummary: string
+  runtime: ChatRuntime
+}): Promise<CompactionPayloadResult> {
+  const { history, modelId, priorRollingSummary, runtime } = args
+
+  const afterTurn = trimTurnWindow(history, modelId)
+
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    priorRollingSummary,
+    modelId
+  )
+
+  const allDropped = mergeDroppedMessages([], droppedFromBudget)
+  const compactionDroppedChars = allDropped.reduce(
+    (total, message) => total + message.content.length,
+    0
+  )
+
+  const summarizeResult = await runRollingSummaryGeneration(
+    runtime,
+    modelId,
+    priorRollingSummary,
+    allDropped
+  )
+
+  const nextRolling = summarizeResult.summary
+
+  const { budgetTrimmed } = trimToCharBudget(afterTurn, nextRolling, modelId)
+
+  const systemMessage = buildSystemSummaryMessage(nextRolling)
+  const core = chatMessagesToModelMessages(budgetTrimmed)
+
+  const modelMessages = systemMessage ? [systemMessage, ...core] : core
+
+  return {
+    compactionDroppedChars,
+    compactionSummarizeMs: summarizeResult.ms,
+    modelMessages,
+    rollingSummary: nextRolling,
+  }
+}
+
+async function buildCompactionPayloadForContinue(args: {
+  messages: ChatMessage[]
+  modelId: ChatModelId
+  priorRollingSummary: string
+  runtime: ChatRuntime
+}): Promise<CompactionPayloadResult> {
+  const { messages, modelId, priorRollingSummary, runtime } = args
+
+  const continueTail: ModelMessage[] = [
+    { role: "user", content: CONTINUE_PROMPT },
+  ]
+
+  const afterTurn = trimTurnWindow(messages, modelId)
+
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    priorRollingSummary,
+    modelId,
+    continueTail
+  )
+
+  const allDropped = mergeDroppedMessages([], droppedFromBudget)
+  const compactionDroppedChars = allDropped.reduce(
+    (total, message) => total + message.content.length,
+    0
+  )
+
+  const summarizeResult = await runRollingSummaryGeneration(
+    runtime,
+    modelId,
+    priorRollingSummary,
+    allDropped
+  )
+
+  const nextRolling = summarizeResult.summary
+
+  const { budgetTrimmed } = trimToCharBudget(
+    afterTurn,
+    nextRolling,
+    modelId,
+    continueTail
+  )
+
+  const systemMessage = buildSystemSummaryMessage(nextRolling)
+  const core = chatMessagesToModelMessages(budgetTrimmed)
+
+  const modelMessages = [
+    ...(systemMessage ? [systemMessage] : []),
+    ...core,
+    ...continueTail,
+  ]
+
+  return {
+    compactionDroppedChars,
+    compactionSummarizeMs: summarizeResult.ms,
+    modelMessages,
+    rollingSummary: nextRolling,
+  }
 }
 
 function getBusyStatus(hasLoadedModel: boolean): RuntimeStatus {
@@ -266,6 +458,7 @@ function createBaseState(
     loadProgress: null,
     messages: [],
     pendingStop: false,
+    rollingContextSummary: "",
     runtimeStatus: "idle",
     selectedModelId,
   }
@@ -296,6 +489,7 @@ export function createChatStore(
         error: null,
         messages: [],
         pendingStop: false,
+        rollingContextSummary: "",
         runtimeStatus: state.hasLoadedModel ? "ready" : "idle",
       }))
     },
@@ -313,14 +507,7 @@ export function createChatStore(
         return
       }
 
-      const visibleMessages = trimMessagesForModel(
-        state.messages,
-        state.selectedModelId
-      )
-      const continuationHistory = [
-        ...toModelMessages(visibleMessages),
-        { role: "user", content: CONTINUE_PROMPT } satisfies ModelMessage,
-      ]
+      const modelId = state.selectedModelId
 
       set({
         activeAssistantId: targetMessage.id,
@@ -334,11 +521,21 @@ export function createChatStore(
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
       })
 
-      runtime.generate(
-        targetMessage.id,
-        state.selectedModelId,
-        continuationHistory
-      )
+      void (async () => {
+        const payload = await buildCompactionPayloadForContinue({
+          messages: state.messages,
+          modelId,
+          priorRollingSummary: state.rollingContextSummary,
+          runtime,
+        })
+
+        set({ rollingContextSummary: payload.rollingSummary })
+
+        runtime.generate(targetMessage.id, modelId, payload.modelMessages, {
+          compactionDroppedChars: payload.compactionDroppedChars,
+          compactionSummarizeMs: payload.compactionSummarizeMs,
+        })
+      })()
     },
     dismissError: () => {
       set((state) => ({
@@ -433,11 +630,23 @@ export function createChatStore(
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
       })
 
-      runtime.generate(
-        assistantMessage.id,
-        state.selectedModelId,
-        toModelMessagesForModel(history, state.selectedModelId)
-      )
+      const modelId = state.selectedModelId
+
+      void (async () => {
+        const payload = await buildCompactionPayloadForRetry({
+          history,
+          modelId,
+          priorRollingSummary: state.rollingContextSummary,
+          runtime,
+        })
+
+        set({ rollingContextSummary: payload.rollingSummary })
+
+        runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
+          compactionDroppedChars: payload.compactionDroppedChars,
+          compactionSummarizeMs: payload.compactionSummarizeMs,
+        })
+      })()
     },
     sendMessage: (value) => {
       const state = get()
@@ -458,6 +667,8 @@ export function createChatStore(
       const assistantMessage = createChatMessage("assistant", "", "streaming")
       const nextMessages = [...baseMessages, userMessage, assistantMessage]
 
+      const modelId = state.selectedModelId
+
       set({
         activeAssistantId: assistantMessage.id,
         activeRequestId: assistantMessage.id,
@@ -472,11 +683,22 @@ export function createChatStore(
         runtimeStatus: getBusyStatus(state.hasLoadedModel),
       })
 
-      runtime.generate(
-        assistantMessage.id,
-        state.selectedModelId,
-        toModelMessagesForModel(nextMessages, state.selectedModelId)
-      )
+      void (async () => {
+        const payload = await buildCompactionPayloadForSend({
+          baseMessages,
+          modelId,
+          priorRollingSummary: state.rollingContextSummary,
+          runtime,
+          userMessage,
+        })
+
+        set({ rollingContextSummary: payload.rollingSummary })
+
+        runtime.generate(assistantMessage.id, modelId, payload.modelMessages, {
+          compactionDroppedChars: payload.compactionDroppedChars,
+          compactionSummarizeMs: payload.compactionSummarizeMs,
+        })
+      })()
     },
     setComposer: (value) => {
       set({ composer: value })
@@ -508,6 +730,7 @@ export function createChatStore(
         loadProgress: null,
         messages: [],
         pendingStop: false,
+        rollingContextSummary: "",
         runtimeStatus: "idle",
         selectedModelId: modelId,
       }))

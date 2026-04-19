@@ -1,15 +1,26 @@
 import type {
+  ChatGenerationConfig,
   ChatModelConfig,
   ChatModelId,
   ChatModelOption,
   DeviceProfile,
 } from "@/lib/chat-types"
 
+const COMPACTION_SUMMARIZE_PRESET: ChatGenerationConfig = {
+  do_sample: true,
+  max_new_tokens: 160,
+  repetition_penalty: 1.05,
+  return_full_text: false,
+  temperature: 0.35,
+  top_p: 0.85,
+}
+
 type NavigatorWithDeviceMemory = Navigator & {
   deviceMemory?: number
 }
 
 const desktopModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Balanced default for most devices with solid local chat quality.",
   dtype: "q4",
   generation: {
@@ -22,6 +33,7 @@ const desktopModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "lfm2-350m",
+  maxPromptChars: 8500,
   label: "LFM2 350M",
   modelId: "onnx-community/LFM2-350M-ONNX",
   shortLabel: "350M",
@@ -30,6 +42,7 @@ const desktopModel: ChatModelConfig = {
 }
 
 const desktopModelLfm25: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Liquid LFM2.5 350M refresh with improved quality in the same lightweight footprint as LFM2 350M.",
   dtype: "q4",
@@ -43,6 +56,7 @@ const desktopModelLfm25: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "lfm2-5-350m",
+  maxPromptChars: 8500,
   label: "LFM2.5 350M",
   modelId: "onnx-community/LFM2.5-350M-ONNX",
   shortLabel: "2.5 350M",
@@ -51,6 +65,7 @@ const desktopModelLfm25: ChatModelConfig = {
 }
 
 const desktopQualityModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Stronger desktop-only upgrade for richer local answers.",
   dtype: "q4",
   generation: {
@@ -63,6 +78,7 @@ const desktopQualityModel: ChatModelConfig = {
   },
   historyTurns: 10,
   id: "lfm2-700m",
+  maxPromptChars: 11000,
   label: "LFM2 700M",
   modelId: "onnx-community/LFM2-700M-ONNX",
   shortLabel: "700M",
@@ -71,6 +87,7 @@ const desktopQualityModel: ChatModelConfig = {
 }
 
 const desktopExperimentalModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Strongest local desktop option in the current Bumblebee catalog.",
   dtype: "q4",
   generation: {
@@ -83,6 +100,7 @@ const desktopExperimentalModel: ChatModelConfig = {
   },
   historyTurns: 10,
   id: "lfm2-1.2b",
+  maxPromptChars: 11000,
   label: "LFM2 1.2B",
   modelId: "onnx-community/LFM2-1.2B-ONNX",
   shortLabel: "1.2B",
@@ -91,6 +109,7 @@ const desktopExperimentalModel: ChatModelConfig = {
 }
 
 const smallQualityModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Stronger mobile step-up with better response quality.",
   dtype: "q4",
   generation: {
@@ -103,6 +122,7 @@ const smallQualityModel: ChatModelConfig = {
   },
   historyTurns: 6,
   id: "smollm2-360m",
+  maxPromptChars: 6500,
   label: "SmolLM2 360M",
   modelId: "onnx-community/SmolLM2-360M-ONNX",
   shortLabel: "360M",
@@ -111,6 +131,7 @@ const smallQualityModel: ChatModelConfig = {
 }
 
 const mobileModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Safest mobile option and the fastest lightweight starting point.",
   dtype: "q4",
   generation: {
@@ -123,6 +144,7 @@ const mobileModel: ChatModelConfig = {
   },
   historyTurns: 6,
   id: "smollm2-135m",
+  maxPromptChars: 6500,
   label: "SmolLM2 135M",
   modelId: "onnx-community/SmolLM2-135M-Instruct-ONNX-MHA",
   shortLabel: "135M",
@@ -131,6 +153,7 @@ const mobileModel: ChatModelConfig = {
 }
 
 const compactGeneralModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Stronger all-around small chat model while staying browser friendly.",
   dtype: "q4",
   generation: {
@@ -143,6 +166,7 @@ const compactGeneralModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "qwen2.5-0.5b",
+  maxPromptChars: 8500,
   label: "Qwen2.5 0.5B",
   modelId: "onnx-community/Qwen2.5-0.5B-Instruct-ONNX-MHA",
   shortLabel: "0.5B",
@@ -151,6 +175,7 @@ const compactGeneralModel: ChatModelConfig = {
 }
 
 const gemma3_270mModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Compact instruct model that stays friendlier on modest hardware and mobile.",
   dtype: "q4",
@@ -164,6 +189,7 @@ const gemma3_270mModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "gemma-3-270m-it",
+  maxPromptChars: 8500,
   label: "Gemma 3 270M",
   modelId: "onnx-community/gemma-3-270m-it-ONNX",
   shortLabel: "Gemma270M",
@@ -172,6 +198,7 @@ const gemma3_270mModel: ChatModelConfig = {
 }
 
 const qwen3_0_6bModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Tiny Qwen3 instruct tune with strong multilingual habits in a browser-friendly size.",
   dtype: "q4",
@@ -185,6 +212,7 @@ const qwen3_0_6bModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "qwen3-0.6b",
+  maxPromptChars: 8500,
   label: "Qwen3 0.6B",
   modelId: "onnx-community/Qwen3-0.6B-ONNX",
   shortLabel: "Qwen3",
@@ -193,6 +221,7 @@ const qwen3_0_6bModel: ChatModelConfig = {
 }
 
 const falconH1TinyModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Ultra-light Falcon H1 Edge instruct (~90M) for quick experiments on modest or mobile hardware.",
   dtype: "q4",
@@ -206,6 +235,7 @@ const falconH1TinyModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "falcon-h1-tiny-90m-instruct",
+  maxPromptChars: 7500,
   label: "Falcon H1 Tiny 90M",
   modelId: "onnx-community/Falcon-H1-Tiny-90M-Instruct-ONNX",
   shortLabel: "Falcon90M",
@@ -214,6 +244,7 @@ const falconH1TinyModel: ChatModelConfig = {
 }
 
 const falconH1TinyMultilingualModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Falcon H1 Edge multilingual instruct (~100M) for mixed-language chat in a still-light footprint.",
   dtype: "q4",
@@ -227,6 +258,7 @@ const falconH1TinyMultilingualModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "falcon-h1-tiny-multilingual-100m-instruct",
+  maxPromptChars: 7500,
   label: "Falcon H1 Tiny Multilingual 100M",
   modelId: "onnx-community/Falcon-H1-Tiny-Multilingual-100M-Instruct-ONNX",
   shortLabel: "Falcon100M",
@@ -235,6 +267,7 @@ const falconH1TinyMultilingualModel: ChatModelConfig = {
 }
 
 const llama32_1bModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Popular small Llama instruct tune for reliable desktop chat quality.",
   dtype: "q4",
@@ -248,6 +281,7 @@ const llama32_1bModel: ChatModelConfig = {
   },
   historyTurns: 10,
   id: "llama-3.2-1b-instruct",
+  maxPromptChars: 11000,
   label: "Llama 3.2 1B",
   modelId: "onnx-community/Llama-3.2-1B-Instruct-ONNX",
   shortLabel: "Llama1B",
@@ -256,6 +290,7 @@ const llama32_1bModel: ChatModelConfig = {
 }
 
 const gemma3_1bModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Slightly larger Gemma 3 instruct for better nuance on desktop.",
   dtype: "q4",
   generation: {
@@ -268,6 +303,7 @@ const gemma3_1bModel: ChatModelConfig = {
   },
   historyTurns: 10,
   id: "gemma-3-1b-it",
+  maxPromptChars: 11000,
   label: "Gemma 3 1B",
   modelId: "onnx-community/gemma-3-1b-it-ONNX",
   shortLabel: "Gemma1B",
@@ -276,6 +312,7 @@ const gemma3_1bModel: ChatModelConfig = {
 }
 
 const tinySwallowModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description: "Dense 1.5B instruct alternative for richer desktop replies.",
   dtype: "q4",
   generation: {
@@ -288,6 +325,7 @@ const tinySwallowModel: ChatModelConfig = {
   },
   historyTurns: 10,
   id: "tinyswallow-1.5b-instruct",
+  maxPromptChars: 11000,
   label: "TinySwallow 1.5B",
   modelId: "onnx-community/TinySwallow-1.5B-Instruct-ONNX",
   shortLabel: "Swallow",
@@ -296,6 +334,7 @@ const tinySwallowModel: ChatModelConfig = {
 }
 
 const bonsaiModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
     "Stronger desktop-only dense option for richer replies at a mid-size footprint.",
   dtype: "q4",
@@ -309,6 +348,7 @@ const bonsaiModel: ChatModelConfig = {
   },
   historyTurns: 8,
   id: "bonsai-1.7b",
+  maxPromptChars: 11000,
   label: "Bonsai 1.7B",
   modelId: "onnx-community/Bonsai-1.7B-ONNX",
   shortLabel: "Bonsai",

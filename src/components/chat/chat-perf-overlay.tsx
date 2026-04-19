@@ -100,6 +100,20 @@ function PerfDetailsBody({ sample }: { sample: ChatPerfSample }) {
                 {sample.historyTurnCount ?? "—"}
               </span>
             </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Compaction</span>
+              <span className="tabular-nums text-foreground">
+                {sample.compactionSummarizeMs != null
+                  ? `${Math.round(sample.compactionSummarizeMs)}ms`
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Dropped chars</span>
+              <span className="tabular-nums text-foreground">
+                {sample.compactionDroppedChars ?? "—"}
+              </span>
+            </div>
           </>
         )}
       </div>
