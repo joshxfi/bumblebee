@@ -223,19 +223,64 @@ describe("chat store", () => {
     )
   })
 
-  it("resets state and recreates the worker when switching models", () => {
+  it("preserves conversation and recreates the worker when switching models", async () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
     store.getState().sendMessage("Write a slogan.")
+    await flushMicrotasks()
+
+    const requestId = store.getState().activeRequestId
+    const previousModelId = store.getState().selectedModelId
+    applyWorkerEvent(store, {
+      type: "token",
+      modelId: previousModelId,
+      requestId: requestId!,
+      text: "Think different.",
+    })
+
     store.getState().setSelectedModel("smollm2-135m")
 
     expect(runtime.reset).toHaveBeenCalledTimes(1)
     expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
-    expect(store.getState().messages).toHaveLength(0)
+    expect(store.getState().messages).toHaveLength(2)
+    expect(store.getState().messages[0]?.role).toBe("user")
+    expect(store.getState().messages[1]?.role).toBe("assistant")
+    expect(store.getState().messages[1]?.state).toBe("done")
+    expect(store.getState().messages[1]?.finishReason).toBe("stopped")
+    expect(store.getState().messages[1]?.content).toContain("Think different.")
     expect(store.getState().runtimeStatus).toBe("idle")
     expect(store.getState().selectedModelId).toBe("smollm2-135m")
     expect(store.getState().hasLoadedModel).toBe(false)
+  })
+
+  it("finalizes streaming assistant when switching models mid-generation", async () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().sendMessage("Hello")
+    await flushMicrotasks()
+
+    const requestId = store.getState().activeRequestId
+    const oldModelId = store.getState().selectedModelId
+
+    applyWorkerEvent(store, {
+      type: "token",
+      modelId: oldModelId,
+      requestId: requestId!,
+      text: "Partial reply",
+    })
+
+    expect(store.getState().runtimeStatus).toBe("generating")
+
+    store.getState().setSelectedModel("smollm2-135m")
+
+    const assistant = store.getState().messages.at(-1)
+    expect(assistant?.state).toBe("done")
+    expect(assistant?.finishReason).toBe("stopped")
+    expect(assistant?.content).toContain("Partial reply")
+    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(store.getState().activeAssistantId).toBeNull()
   })
 
   it("defaults constrained devices to Falcon H1 Tiny 90M but still allows larger mobile models", () => {

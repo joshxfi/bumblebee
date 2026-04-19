@@ -199,13 +199,6 @@ function dropLastAssistantTurn(messages: ChatMessage[]) {
   return nextMessages
 }
 
-function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
-  return pruneConversation(messages).map(({ role, content }) => ({
-    role,
-    content,
-  }))
-}
-
 type CompactionPayloadResult = {
   compactionDroppedChars: number
   compactionSummarizeMs: number
@@ -236,7 +229,14 @@ async function runRollingSummaryGeneration(
   return new Promise((resolve) => {
     let buffer = ""
     const unsub = runtime.subscribe((event) => {
-      if (event.requestId !== requestId) {
+      const eventRequestId =
+        event.type === "token" || event.type === "complete"
+          ? event.requestId
+          : event.type === "error"
+            ? event.requestId
+            : undefined
+
+      if (eventRequestId !== requestId) {
         return
       }
 
@@ -759,22 +759,48 @@ export function createChatStore(
       runtime.reset()
       runtime.recreateWorker()
 
-      set((currentState) => ({
-        ...currentState,
-        activeAssistantId: null,
-        activeDevice: null,
-        activeRequestId: null,
-        composer: "",
-        error: null,
-        hasLoadedModel: false,
-        loadProgress: null,
-        messages: [],
-        pendingStop: false,
-        rollingContextSummary: "",
-        runtimeStatus: "idle",
-        selectedModelId: modelId,
-        isCompactingContext: false,
-      }))
+      set((currentState) => {
+        let nextMessages = currentState.messages
+        if (currentState.activeAssistantId !== null) {
+          nextMessages = finalizeAssistantMessage(
+            nextMessages,
+            currentState.activeAssistantId,
+            "done",
+            "stopped",
+            true
+          )
+        }
+
+        const nextRollingSummary = clampCompactionSummary(
+          currentState.rollingContextSummary
+        )
+        const afterTurn = trimTurnWindow(
+          pruneConversation(nextMessages),
+          modelId
+        )
+        const { budgetTrimmed } = trimToCharBudget(
+          afterTurn,
+          nextRollingSummary,
+          modelId
+        )
+
+        return {
+          ...currentState,
+          activeAssistantId: null,
+          activeDevice: null,
+          activeRequestId: null,
+          composer: currentState.composer,
+          error: null,
+          hasLoadedModel: false,
+          loadProgress: null,
+          messages: budgetTrimmed,
+          pendingStop: false,
+          rollingContextSummary: nextRollingSummary,
+          runtimeStatus: "idle",
+          selectedModelId: modelId,
+          isCompactingContext: false,
+        }
+      })
     },
     stopGeneration: () => {
       if (get().runtimeStatus !== "generating") {

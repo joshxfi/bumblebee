@@ -276,6 +276,7 @@ export function ChatApp() {
         canRetry={canRetry}
         mascotTone={mascotTone}
         messagesCount={messages.length}
+        modelSelectionDisabled={runtimeStatus === "loading-model"}
         onClear={clearChat}
         onRetry={retryLastTurn}
         onSelectModel={setSelectedModel}
