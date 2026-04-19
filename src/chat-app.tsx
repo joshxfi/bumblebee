@@ -130,7 +130,7 @@ export function ChatApp() {
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
     : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
-  // eslint-disable-next-line react-hooks/incompatible-library
+
   const rowVirtualizer = useVirtualizer({
     count: shouldVirtualize ? virtualRowCount : 0,
     estimateSize: (index) => {
