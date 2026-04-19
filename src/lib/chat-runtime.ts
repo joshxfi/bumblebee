@@ -1,4 +1,5 @@
 import type {
+  ChatGenerationOverrides,
   ChatPerfSample,
   ChatModelId,
   ModelMessage,
@@ -15,6 +16,8 @@ type LoadPerfState = {
 }
 
 type RequestPerfState = {
+  compactionDroppedChars?: number
+  compactionSummarizeMs?: number
   firstTokenAt: number | null
   historyTurnCount: number
   messageChars: number
@@ -28,13 +31,20 @@ let latestPerfSample: ChatPerfSample | null = null
 
 const IS_DEV = Boolean(import.meta.env.DEV)
 
+export type ChatRuntimeGenerateOptions = {
+  compactionDroppedChars?: number
+  compactionSummarizeMs?: number
+  generationOverrides?: ChatGenerationOverrides
+}
+
 export type ChatRuntime = {
   subscribe: (listener: ChatRuntimeListener) => () => void
   init: (modelId: ChatModelId) => void
   generate: (
     requestId: string,
     modelId: ChatModelId,
-    messages: ModelMessage[]
+    messages: ModelMessage[],
+    options?: ChatRuntimeGenerateOptions
   ) => void
   stop: () => void
   reset: () => void
@@ -78,12 +88,19 @@ export class ChatRuntimeClient implements ChatRuntime {
     this.worker.postMessage({ type: "init", modelId } satisfies WorkerRequest)
   }
 
-  generate(requestId: string, modelId: ChatModelId, messages: ModelMessage[]) {
+  generate(
+    requestId: string,
+    modelId: ChatModelId,
+    messages: ModelMessage[],
+    options?: ChatRuntimeGenerateOptions
+  ) {
     this.currentModelId = modelId
     if (this.readyModelId !== modelId && this.loadPerf?.modelId !== modelId) {
       this.beginLoadPerf(modelId)
     }
     this.requestPerf = {
+      compactionDroppedChars: options?.compactionDroppedChars,
+      compactionSummarizeMs: options?.compactionSummarizeMs,
       firstTokenAt: null,
       historyTurnCount: messages.reduce(
         (count, message) => count + (message.role === "user" ? 1 : 0),
@@ -100,6 +117,7 @@ export class ChatRuntimeClient implements ChatRuntime {
     performance.mark(`generation-start:${requestId}`)
     this.worker.postMessage({
       type: "generate",
+      generationOverrides: options?.generationOverrides,
       modelId,
       requestId,
       messages,
@@ -236,6 +254,8 @@ export class ChatRuntimeClient implements ChatRuntime {
         )
 
         emitPerfSample({
+          compactionDroppedChars: this.requestPerf.compactionDroppedChars,
+          compactionSummarizeMs: this.requestPerf.compactionSummarizeMs,
           completionMs,
           firstTokenMs,
           generatedTokens: event.generatedTokens,

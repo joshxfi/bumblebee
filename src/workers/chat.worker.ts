@@ -10,6 +10,7 @@ import {
 import { getModelConfig } from "@/lib/chat-config"
 import type {
   ChatDevice,
+  ChatGenerationOverrides,
   ChatModelId,
   ModelLoadProgress,
   ModelMessage,
@@ -263,10 +264,21 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
   return loadPromise
 }
 
+function mergeGenerationOptions(
+  base: ReturnType<typeof getModelConfig>["generation"],
+  overrides?: ChatGenerationOverrides
+) {
+  return {
+    ...base,
+    ...overrides,
+  }
+}
+
 async function runGeneration(
   requestId: string,
   modelId: ChatModelId,
-  messages: ModelMessage[]
+  messages: ModelMessage[],
+  generationOverrides?: ChatGenerationOverrides
 ) {
   activeRequestId = requestId
   bufferedText = ""
@@ -276,6 +288,10 @@ async function runGeneration(
   try {
     const activeGenerator = await loadGenerator(modelId)
     const model = getModelConfig(modelId)
+    const generationOptions = mergeGenerationOptions(
+      model.generation,
+      generationOverrides
+    )
     interruptable.reset()
     performance.mark(`worker-generation-start:${requestId}`)
 
@@ -294,7 +310,7 @@ async function runGeneration(
     })
 
     await activeGenerator(messages, {
-      ...model.generation,
+      ...generationOptions,
       stopping_criteria: stoppingCriteria,
       streamer,
     } as Parameters<Generator>[1] & {
@@ -314,7 +330,7 @@ async function runGeneration(
       requestId,
       finishReason: interruptable.interrupted
         ? "stopped"
-        : generatedTokenCount >= model.generation.max_new_tokens
+        : generatedTokenCount >= generationOptions.max_new_tokens
           ? "length"
           : "completed",
     })
@@ -360,7 +376,12 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
     }
 
     case "generate": {
-      void runGeneration(payload.requestId, payload.modelId, payload.messages)
+      void runGeneration(
+        payload.requestId,
+        payload.modelId,
+        payload.messages,
+        payload.generationOverrides
+      )
       return
     }
 

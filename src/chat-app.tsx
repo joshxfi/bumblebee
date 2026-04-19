@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
+import { CircleNotchIcon, PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react"
 
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
 import { ChatHeader } from "@/components/chat/chat-header"
@@ -16,7 +16,11 @@ import {
   getLatestChatPerfSample,
   subscribeChatPerf,
 } from "@/lib/chat-runtime"
-import { useChatStore } from "@/lib/chat-store"
+import {
+  formatContextWindowLabel,
+  getContextWindowStats,
+} from "@/lib/context-compaction"
+import { CONTINUE_PROMPT, useChatStore } from "@/lib/chat-store"
 import type { ChatMessage } from "@/lib/chat-types"
 
 export function ChatApp() {
@@ -41,6 +45,12 @@ export function ChatApp() {
   const clearChat = useChatStore((state) => state.clearChat)
   const dismissError = useChatStore((state) => state.dismissError)
   const setSelectedModel = useChatStore((state) => state.setSelectedModel)
+  const isCompactingContext = useChatStore(
+    (state) => state.isCompactingContext
+  )
+  const rollingContextSummary = useChatStore(
+    (state) => state.rollingContextSummary
+  )
   const scrollViewportRef = useRef<HTMLDivElement | null>(null)
   const isNearBottomRef = useRef(true)
   const copyFeedbackTimeoutRef = useRef<number | null>(null)
@@ -75,6 +85,30 @@ export function ChatApp() {
       : null
   const showPrepareModel = !hasLoadedModel
   const shouldVirtualize = messages.length > 80
+  const virtualRowCount =
+    shouldVirtualize && isCompactingContext
+      ? messages.length + 1
+      : messages.length
+  const contextWindowLabel = useMemo(() => {
+    if (messages.length === 0) {
+      return null
+    }
+    const includeContinue = continuableMessageId !== null
+    const stats = getContextWindowStats(
+      messages,
+      selectedModelId,
+      rollingContextSummary,
+      includeContinue
+        ? [{ content: CONTINUE_PROMPT, role: "user" as const }]
+        : []
+    )
+    return formatContextWindowLabel(stats)
+  }, [
+    continuableMessageId,
+    messages,
+    rollingContextSummary,
+    selectedModelId,
+  ])
   const mascotTone = error
     ? "error"
     : runtimeStatus === "loading-model"
@@ -93,20 +127,22 @@ export function ChatApp() {
         return loaded && total ? `${loaded} / ${total}` : null
       })()
 
-  const perfBarVisible = perfSample !== null && hasLoadedModel
   const scrollButtonOffsetClassName = showPrepareModel
     ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
-    : perfBarVisible
-      ? "bottom-[calc(9.25rem+env(safe-area-inset-bottom))] sm:bottom-[calc(8.75rem+env(safe-area-inset-bottom))]"
-      : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
+    : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]"
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
-    count: shouldVirtualize ? messages.length : 0,
-    estimateSize: () => 156,
+    count: shouldVirtualize ? virtualRowCount : 0,
+    estimateSize: (index) => {
+      if (isCompactingContext && index === messages.length) {
+        return 56
+      }
+      return 156
+    },
     gap: 12,
     getScrollElement: () => scrollViewportRef.current,
     overscan: 6,
-    paddingEnd: 16,
+    paddingEnd: 40,
     paddingStart: 16,
   })
   const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : []
@@ -149,7 +185,7 @@ export function ChatApp() {
     }
 
     rowVirtualizer.measure()
-  }, [messages, rowVirtualizer, shouldVirtualize])
+  }, [isCompactingContext, messages, rowVirtualizer, shouldVirtualize])
 
   useEffect(() => {
     const viewport = scrollViewportRef.current
@@ -167,7 +203,10 @@ export function ChatApp() {
       previousLastMessageLengthRef.current !== lastMessageLength
 
     const rafId = window.requestAnimationFrame(() => {
-      if (isNearBottomRef.current && (isNewMessage || isStreamingUpdate)) {
+      if (
+        isNearBottomRef.current &&
+        (isNewMessage || isStreamingUpdate || isCompactingContext)
+      ) {
         viewport.scrollTo({
           top: viewport.scrollHeight,
           behavior: isNewMessage ? "smooth" : "auto",
@@ -190,7 +229,7 @@ export function ChatApp() {
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [messages])
+  }, [isCompactingContext, messages])
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     const viewport = scrollViewportRef.current
@@ -237,6 +276,7 @@ export function ChatApp() {
         canRetry={canRetry}
         mascotTone={mascotTone}
         messagesCount={messages.length}
+        modelSelectionDisabled={runtimeStatus === "loading-model"}
         onClear={clearChat}
         onRetry={retryLastTurn}
         onSelectModel={setSelectedModel}
@@ -249,8 +289,8 @@ export function ChatApp() {
           ref={scrollViewportRef}
           className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${
             showPrepareModel
-              ? "pb-[calc(12rem+env(safe-area-inset-bottom))]"
-              : "pb-[calc(8.5rem+env(safe-area-inset-bottom))]"
+              ? "pb-[calc(13.5rem+env(safe-area-inset-bottom))]"
+              : "pb-[calc(10.5rem+env(safe-area-inset-bottom))]"
           }`}
         >
           {messages.length === 0 ? (
@@ -265,6 +305,29 @@ export function ChatApp() {
               style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
             >
               {virtualRows.map((virtualRow) => {
+                const isCompactionStrip =
+                  isCompactingContext && virtualRow.index === messages.length
+
+                if (isCompactionStrip) {
+                  return (
+                    <div
+                      data-index={virtualRow.index}
+                      key="__compaction_strip"
+                      ref={(node) => {
+                        if (node) {
+                          rowVirtualizer.measureElement(node)
+                        }
+                      }}
+                      className="absolute top-0 left-0 w-full"
+                      style={{
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <ContextCompactionStrip />
+                    </div>
+                  )
+                }
+
                 const message = messages[virtualRow.index]
                 if (!message) {
                   return null
@@ -304,7 +367,7 @@ export function ChatApp() {
               })}
             </div>
           ) : (
-            <div className="flex flex-col gap-3 py-4">
+            <div className="flex flex-col gap-3 pt-4 pb-10 sm:pb-12">
               {messages.map((message) => (
                 <ChatMessageBubble
                   canContinue={
@@ -323,6 +386,7 @@ export function ChatApp() {
                   onCopy={handleCopyMessage}
                 />
               ))}
+              {isCompactingContext ? <ContextCompactionStrip /> : null}
             </div>
           )}
         </div>
@@ -353,13 +417,18 @@ export function ChatApp() {
               runtimeStatus={runtimeStatus}
             />
           ) : null}
-          {hasLoadedModel && perfSample ? (
-            <ChatPerfOverlay sample={perfSample} />
-          ) : null}
           <div className="border border-border bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
             <div className="flex items-end gap-2">
+              {hasLoadedModel && perfSample ? (
+                <div className="flex h-12 shrink-0 items-center">
+                  <ChatPerfOverlay
+                    contextWindowLabel={contextWindowLabel}
+                    sample={perfSample}
+                  />
+                </div>
+              ) : null}
               <Textarea
-                className="max-h-36 min-h-12 resize-none border-border bg-transparent px-4 py-3 text-sm leading-6 focus-visible:ring-0"
+                className="max-h-36 min-h-12 min-w-0 flex-1 resize-none border-border bg-transparent px-4 py-2 text-sm leading-6 focus-visible:ring-0"
                 placeholder="Message Bumblebee"
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
@@ -373,8 +442,9 @@ export function ChatApp() {
                 }}
               />
 
-              <div className="flex shrink-0 items-center gap-2 pb-1">
+              <div className="flex h-12 shrink-0 items-center gap-2">
                 <Button
+                  className="h-12 min-h-12 w-12 min-w-12 shrink-0 rounded-none p-0 [&_svg]:size-5"
                   disabled={runtimeStatus !== "generating"}
                   size="icon"
                   variant="secondary"
@@ -383,6 +453,7 @@ export function ChatApp() {
                   <StopIcon />
                 </Button>
                 <Button
+                  className="h-12 min-h-12 w-12 min-w-12 shrink-0 rounded-none p-0 [&_svg]:size-5"
                   disabled={!canSend}
                   size="icon"
                   onClick={() => sendMessage()}
@@ -394,6 +465,21 @@ export function ChatApp() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ContextCompactionStrip() {
+  return (
+    <div
+      className="flex items-center gap-2 text-sm text-muted-foreground"
+      role="status"
+    >
+      <CircleNotchIcon
+        aria-hidden
+        className="size-4 shrink-0 animate-spin text-muted-foreground"
+      />
+      <span>Updating conversation context…</span>
     </div>
   )
 }

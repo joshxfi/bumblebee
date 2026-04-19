@@ -4,17 +4,45 @@ import { applyWorkerEvent, createChatStore } from "@/lib/chat-store"
 import type { ChatRuntime } from "@/lib/chat-runtime"
 import type { WorkerEvent } from "@/lib/chat-types"
 
+function flushMicrotasks() {
+  return Promise.resolve().then(() => Promise.resolve())
+}
+
 function createRuntimeStub(): ChatRuntime & {
   events: Array<{ type: string; payload?: unknown }>
+  listeners: Set<(event: WorkerEvent) => void>
 } {
   const events: Array<{ type: string; payload?: unknown }> = []
+  const listeners = new Set<(event: WorkerEvent) => void>()
 
   return {
     events,
-    subscribe: () => () => undefined,
+    listeners,
+    subscribe: vi.fn((listener: (event: WorkerEvent) => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    }),
     dispose: () => undefined,
-    generate: vi.fn((requestId, modelId, messages) => {
-      events.push({ type: "generate", payload: { requestId, modelId, messages } })
+    generate: vi.fn((requestId, modelId, messages, options) => {
+      events.push({
+        type: "generate",
+        payload: { requestId, modelId, messages, options },
+      })
+      queueMicrotask(() => {
+        if (String(requestId).startsWith("compact-")) {
+          for (const listener of listeners) {
+            listener({
+              type: "complete",
+              finishReason: "completed",
+              generatedTokens: 4,
+              modelId,
+              requestId,
+            })
+          }
+        }
+      })
     }),
     init: vi.fn((modelId) => {
       events.push({ type: "init", payload: { modelId } })
@@ -32,7 +60,22 @@ function createRuntimeStub(): ChatRuntime & {
 }
 
 describe("chat store", () => {
-  it("queues a user turn and requests generation with the selected model", () => {
+  it("clears isCompactingContext when the conversation is cleared", () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.setState({
+      isCompactingContext: true,
+      messages: [],
+      runtimeStatus: "ready",
+    })
+
+    store.getState().clearChat()
+
+    expect(store.getState().isCompactingContext).toBe(false)
+  })
+
+  it("queues a user turn and requests generation with the selected model", async () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
@@ -47,10 +90,14 @@ describe("chat store", () => {
     expect(state.messages[1]?.role).toBe("assistant")
     expect(state.messages[1]?.state).toBe("streaming")
     expect(state.runtimeStatus).toBe("loading-model")
+
+    await flushMicrotasks()
+
     expect(runtime.generate).toHaveBeenCalledWith(
       expect.any(String),
       state.selectedModelId,
-      expect.any(Array)
+      expect.any(Array),
+      expect.anything()
     )
   })
 
@@ -128,7 +175,7 @@ describe("chat store", () => {
     expect(assistant?.finishReason).toBe("completed")
   })
 
-  it("marks responses that stop at the token limit and continues the same assistant turn", () => {
+  it("marks responses that stop at the token limit and continues the same assistant turn", async () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
@@ -159,6 +206,9 @@ describe("chat store", () => {
     const continuedAssistant = store.getState().messages.at(-1)
     expect(continuedAssistant?.id).toBe(truncatedAssistant?.id)
     expect(continuedAssistant?.state).toBe("streaming")
+
+    await flushMicrotasks()
+
     expect(runtime.generate).toHaveBeenLastCalledWith(
       truncatedAssistant?.id,
       modelId,
@@ -168,23 +218,69 @@ describe("chat store", () => {
           content:
             "Continue your last response from where it stopped. Do not repeat prior text.",
         },
-      ])
+      ]),
+      expect.anything()
     )
   })
 
-  it("resets state and recreates the worker when switching models", () => {
+  it("preserves conversation and recreates the worker when switching models", async () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
     store.getState().sendMessage("Write a slogan.")
+    await flushMicrotasks()
+
+    const requestId = store.getState().activeRequestId
+    const previousModelId = store.getState().selectedModelId
+    applyWorkerEvent(store, {
+      type: "token",
+      modelId: previousModelId,
+      requestId: requestId!,
+      text: "Think different.",
+    })
+
     store.getState().setSelectedModel("smollm2-135m")
 
     expect(runtime.reset).toHaveBeenCalledTimes(1)
     expect(runtime.recreateWorker).toHaveBeenCalledTimes(1)
-    expect(store.getState().messages).toHaveLength(0)
+    expect(store.getState().messages).toHaveLength(2)
+    expect(store.getState().messages[0]?.role).toBe("user")
+    expect(store.getState().messages[1]?.role).toBe("assistant")
+    expect(store.getState().messages[1]?.state).toBe("done")
+    expect(store.getState().messages[1]?.finishReason).toBe("stopped")
+    expect(store.getState().messages[1]?.content).toContain("Think different.")
     expect(store.getState().runtimeStatus).toBe("idle")
     expect(store.getState().selectedModelId).toBe("smollm2-135m")
     expect(store.getState().hasLoadedModel).toBe(false)
+  })
+
+  it("finalizes streaming assistant when switching models mid-generation", async () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.getState().sendMessage("Hello")
+    await flushMicrotasks()
+
+    const requestId = store.getState().activeRequestId
+    const oldModelId = store.getState().selectedModelId
+
+    applyWorkerEvent(store, {
+      type: "token",
+      modelId: oldModelId,
+      requestId: requestId!,
+      text: "Partial reply",
+    })
+
+    expect(store.getState().runtimeStatus).toBe("generating")
+
+    store.getState().setSelectedModel("smollm2-135m")
+
+    const assistant = store.getState().messages.at(-1)
+    expect(assistant?.state).toBe("done")
+    expect(assistant?.finishReason).toBe("stopped")
+    expect(assistant?.content).toContain("Partial reply")
+    expect(store.getState().selectedModelId).toBe("smollm2-135m")
+    expect(store.getState().activeAssistantId).toBeNull()
   })
 
   it("defaults constrained devices to Falcon H1 Tiny 90M but still allows larger mobile models", () => {
@@ -257,7 +353,48 @@ describe("chat store", () => {
     ])
   })
 
-  it("trims model history to the configured recent turn window", () => {
+  it("trims model history to the configured recent turn window", async () => {
+    const runtime = createRuntimeStub()
+    const store = createChatStore(runtime)
+
+    store.setState({
+      messages: Array.from({ length: 14 }, (_, index) => ({
+        content:
+          index % 2 === 0
+            ? `User turn ${index / 2 + 1}`
+            : `Assistant turn ${Math.ceil(index / 2)}`,
+        createdAt: index,
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        state: "done",
+      })),
+      runtimeStatus: "ready",
+    })
+
+    store.getState().sendMessage("Newest turn")
+
+    await flushMicrotasks()
+
+    expect(runtime.generate).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "lfm2-5-350m",
+      expect.arrayContaining([
+        { role: "user", content: "User turn 1" },
+        { role: "assistant", content: "Assistant turn 1" },
+        { role: "user", content: "Newest turn" },
+      ]),
+      expect.anything()
+    )
+
+    const payload = runtime.events.at(-1)?.payload as {
+      messages: Array<{ role: string; content: string }>
+    }
+
+    expect(payload.messages.find((message) => message.content === "User turn 1")).toBeDefined()
+    expect(payload.messages.filter((message) => message.role === "user")).toHaveLength(8)
+  })
+
+  it("runs compaction summarization before main generation when turns fall off the window", async () => {
     const runtime = createRuntimeStub()
     const store = createChatStore(runtime)
 
@@ -277,6 +414,19 @@ describe("chat store", () => {
 
     store.getState().sendMessage("Newest turn")
 
+    await flushMicrotasks()
+
+    expect(runtime.generate).toHaveBeenCalledTimes(2)
+
+    const firstCall = vi.mocked(runtime.generate).mock.calls[0]
+    expect(String(firstCall?.[0]).startsWith("compact-")).toBe(true)
+    expect(firstCall?.[3]).toMatchObject({
+      generationOverrides: expect.objectContaining({
+        max_new_tokens: 160,
+        temperature: 0.35,
+      }),
+    })
+
     expect(runtime.generate).toHaveBeenLastCalledWith(
       expect.any(String),
       "lfm2-5-350m",
@@ -284,15 +434,20 @@ describe("chat store", () => {
         { role: "user", content: "User turn 3" },
         { role: "assistant", content: "Assistant turn 3" },
         { role: "user", content: "Newest turn" },
-      ])
+      ]),
+      expect.objectContaining({
+        compactionDroppedChars: expect.any(Number),
+        compactionSummarizeMs: expect.any(Number),
+      })
     )
 
-    const payload = runtime.events.at(-1)?.payload as {
-      messages: Array<{ role: string; content: string }>
-    }
+    const mainPayload = vi.mocked(runtime.generate).mock.calls[1]?.[2] as Array<{
+      role: string
+      content: string
+    }>
 
-    expect(payload.messages.find((message) => message.content === "User turn 1")).toBeUndefined()
-    expect(payload.messages.filter((message) => message.role === "user")).toHaveLength(8)
+    expect(mainPayload.find((message) => message.content === "User turn 1")).toBeUndefined()
+    expect(mainPayload.filter((message) => message.role === "user")).toHaveLength(8)
   })
 
   it("ignores stale worker events from a previous model", () => {

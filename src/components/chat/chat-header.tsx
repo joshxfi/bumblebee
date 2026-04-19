@@ -78,6 +78,7 @@ type ChatHeaderProps = {
   canRetry: boolean
   messagesCount: number
   mascotTone: "error" | "idle" | "loading" | "ready" | "typing"
+  modelSelectionDisabled?: boolean
   onClear: () => void
   onRetry: () => void
   onSelectModel: (modelId: ChatModelId) => void
@@ -90,6 +91,7 @@ export function ChatHeader({
   canRetry,
   messagesCount,
   mascotTone,
+  modelSelectionDisabled = false,
   onClear,
   onRetry,
   onSelectModel,
@@ -150,6 +152,7 @@ export function ChatHeader({
                 <Button
                   aria-label="Select model"
                   className="w-[9rem] justify-between border-border bg-card text-foreground hover:bg-accent sm:w-[11rem]"
+                  disabled={modelSelectionDisabled}
                   size="sm"
                   variant="outline"
                 />

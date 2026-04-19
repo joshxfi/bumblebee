@@ -1,4 +1,4 @@
-import { CaretDownIcon } from "@phosphor-icons/react"
+import { GaugeIcon } from "@phosphor-icons/react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -7,10 +7,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
 import type { ChatPerfSample } from "@/lib/chat-types"
 
 type ChatPerfOverlayProps = {
+  contextWindowLabel?: string | null
   sample: ChatPerfSample | null
 }
 
@@ -22,28 +22,42 @@ function formatRate(value?: number) {
   return typeof value === "number" ? `${value.toFixed(1)} tok/s` : "—"
 }
 
-function PerfTriggerContents({ sample }: { sample: ChatPerfSample }) {
+function PerfIconTrigger({ sample }: { sample: ChatPerfSample }) {
+  const headline =
+    sample.kind === "load"
+      ? `Model load ${formatMs(sample.modelLoadMs)}`
+      : `Generation ${formatRate(sample.tokensPerSec)}`
   return (
     <>
-      <span className="text-sm font-medium text-foreground">Perf</span>
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-xs uppercase tracking-[0.12em] text-muted-foreground">
-          {sample.kind === "load"
-            ? formatMs(sample.modelLoadMs)
-            : formatRate(sample.tokensPerSec)}
-        </span>
-        <CaretDownIcon
-          className="size-4 shrink-0 transition-transform group-aria-expanded/button:rotate-180"
-          data-icon="inline-end"
-        />
-      </span>
+      <GaugeIcon aria-hidden className="size-5" />
+      <span className="sr-only">Performance. {headline}</span>
     </>
   )
 }
 
-function PerfDetailsBody({ sample }: { sample: ChatPerfSample }) {
+function PerfDetailsBody({
+  contextWindowLabel,
+  sample,
+}: {
+  contextWindowLabel?: string | null
+  sample: ChatPerfSample
+}) {
   return (
     <>
+      {contextWindowLabel ? (
+        <div className="border-b border-border px-3 py-2.5 text-xs leading-snug text-muted-foreground">
+          <div className="text-[0.7rem] font-medium uppercase tracking-wider text-muted-foreground/90">
+            Context window
+          </div>
+          <p className="mt-1 font-mono text-[0.8rem] text-foreground/90">
+            {contextWindowLabel}
+          </p>
+          <p className="mt-2 text-[0.75rem] leading-snug text-muted-foreground">
+            Rough share of this model&apos;s input limit; older turns may be
+            summarized when it fills up.
+          </p>
+        </div>
+      ) : null}
       <div className="border-b border-border px-3 py-2.5">
         <div className="flex items-center justify-between gap-3 text-sm font-medium text-foreground">
           <span>Latest sample</span>
@@ -100,6 +114,20 @@ function PerfDetailsBody({ sample }: { sample: ChatPerfSample }) {
                 {sample.historyTurnCount ?? "—"}
               </span>
             </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Compaction</span>
+              <span className="tabular-nums text-foreground">
+                {sample.compactionSummarizeMs != null
+                  ? `${Math.round(sample.compactionSummarizeMs)}ms`
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Dropped chars</span>
+              <span className="tabular-nums text-foreground">
+                {sample.compactionDroppedChars ?? "—"}
+              </span>
+            </div>
           </>
         )}
       </div>
@@ -107,39 +135,47 @@ function PerfDetailsBody({ sample }: { sample: ChatPerfSample }) {
   )
 }
 
-export function ChatPerfOverlay({ sample }: ChatPerfOverlayProps) {
+export function ChatPerfOverlay({
+  contextWindowLabel,
+  sample,
+}: ChatPerfOverlayProps) {
   if (!sample) {
     return null
   }
 
-  const triggerClassName = cn(
-    "flex h-auto min-h-11 w-full max-w-sm items-center justify-between gap-3 px-4 py-3 text-sm text-muted-foreground sm:min-h-12 sm:px-5 sm:py-3.5 md:w-72 md:max-w-none"
-  )
-
   return (
-    <div className="flex w-full shrink-0 justify-start">
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button
-              aria-label="Performance details"
-              className={triggerClassName}
-              variant="outline"
-            />
-          }
-        >
-          <PerfTriggerContents sample={sample} />
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="min-w-[min(calc(100vw-2rem),20rem)] max-w-[min(calc(100vw-1.5rem),24rem)] gap-0 border-border bg-popover p-0 text-sm text-muted-foreground shadow-md ring-1 ring-foreground/10 md:min-w-72"
-          side="top"
-          sideOffset={8}
-        >
-          <PopoverTitle className="sr-only">Performance details</PopoverTitle>
-          <PerfDetailsBody sample={sample} />
-        </PopoverContent>
-      </Popover>
-    </div>
+    <Popover>
+      <PopoverTrigger
+        className="inline-flex h-12 min-h-12 w-12 min-w-12 shrink-0 items-center justify-center p-0 outline-none"
+        render={
+          <Button
+            aria-label="Performance details"
+            className="h-12 min-h-12 w-12 min-w-12 shrink-0 rounded-none border-border p-0 [&_svg]:size-5"
+            size="icon"
+            title={
+              sample.kind === "load"
+                ? `Load ${formatMs(sample.modelLoadMs)}`
+                : formatRate(sample.tokensPerSec)
+            }
+            type="button"
+            variant="outline"
+          />
+        }
+      >
+        <PerfIconTrigger sample={sample} />
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="min-w-[min(calc(100vw-2rem),20rem)] max-w-[min(calc(100vw-1.5rem),24rem)] gap-0 border-border bg-popover p-0 text-sm text-muted-foreground shadow-md ring-1 ring-foreground/10 md:min-w-72"
+        side="top"
+        sideOffset={8}
+      >
+        <PopoverTitle className="sr-only">Performance details</PopoverTitle>
+        <PerfDetailsBody
+          contextWindowLabel={contextWindowLabel}
+          sample={sample}
+        />
+      </PopoverContent>
+    </Popover>
   )
 }
