@@ -1,5 +1,5 @@
 {
-  "name": "web-llm-inference",
+  "name": "bumblebee",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -19,7 +19,7 @@
     "format": "biome format --write",
     "ui:add": "bunx --bun shadcn@latest add",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
