@@ -30,6 +30,13 @@ import {
   getContextWindowStats,
 } from "@/lib/context-compaction";
 
+/** Switch the message list to windowed rendering past this many messages. */
+const VIRTUALIZE_THRESHOLD = 80;
+/** Treated as "scrolled to the bottom" within this many pixels of the end. */
+const NEAR_BOTTOM_PX = 56;
+/** How long the inline "Copied"/"Copy failed" hint stays visible. */
+const COPY_FEEDBACK_MS = 1800;
+
 export function ChatApp() {
   const messages = useChatStore((state) => state.messages);
   const composer = useChatStore((state) => state.composer);
@@ -91,7 +98,7 @@ export function ChatApp() {
       ? (messages.at(-1)?.id ?? null)
       : null;
   const showPrepareModel = !hasLoadedModel;
-  const shouldVirtualize = messages.length > 80;
+  const shouldVirtualize = messages.length > VIRTUALIZE_THRESHOLD;
   const virtualRowCount =
     shouldVirtualize && isCompactingContext
       ? messages.length + 1
@@ -166,18 +173,33 @@ export function ChatApp() {
     const updateScrollState = () => {
       const distanceFromBottom =
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const nextIsNearBottom = distanceFromBottom < 56;
+      const nextIsNearBottom = distanceFromBottom < NEAR_BOTTOM_PX;
 
       isNearBottomRef.current = nextIsNearBottom;
       setIsNearBottom(nextIsNearBottom);
       setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom);
     };
 
+    // Coalesce rapid scroll events to one layout read per frame.
+    let frame: number | null = null;
+    const onScroll = () => {
+      if (frame !== null) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        updateScrollState();
+      });
+    };
+
     updateScrollState();
-    viewport.addEventListener("scroll", updateScrollState, { passive: true });
+    viewport.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
-      viewport.removeEventListener("scroll", updateScrollState);
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      viewport.removeEventListener("scroll", onScroll);
     };
   }, [messages.length]);
 
@@ -218,7 +240,7 @@ export function ChatApp() {
 
       const distanceFromBottom =
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const nextIsNearBottom = distanceFromBottom < 56;
+      const nextIsNearBottom = distanceFromBottom < NEAR_BOTTOM_PX;
 
       isNearBottomRef.current = nextIsNearBottom;
       setIsNearBottom(nextIsNearBottom);
@@ -269,7 +291,7 @@ export function ChatApp() {
       setCopiedMessageState((current) =>
         current?.messageId === message.id ? null : current,
       );
-    }, 1800);
+    }, COPY_FEEDBACK_MS);
   };
 
   return (
@@ -421,7 +443,14 @@ export function ChatApp() {
             />
           ) : null}
           <div className="border border-border bg-card p-2 shadow-[0_-10px_28px_rgba(0,0,0,0.22)]">
-            <div className="flex items-end gap-2">
+            <form
+              aria-label="Send a message to Bumblebee"
+              className="flex items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                sendMessage();
+              }}
+            >
               {hasLoadedModel && perfSample ? (
                 <div className="flex h-12 shrink-0 items-center">
                   <ChatPerfOverlay
@@ -431,6 +460,7 @@ export function ChatApp() {
                 </div>
               ) : null}
               <Textarea
+                aria-label="Message Bumblebee"
                 className="max-h-36 min-h-12 min-w-0 flex-1 resize-none border-border bg-transparent px-4 py-2 text-sm leading-6 focus-visible:ring-0"
                 placeholder="Message Bumblebee"
                 value={composer}
@@ -450,21 +480,23 @@ export function ChatApp() {
                   className="h-12 min-h-12 w-12 min-w-12 shrink-0 rounded-none p-0 [&_svg]:size-5"
                   disabled={runtimeStatus !== "generating"}
                   size="icon"
+                  type="button"
                   variant="secondary"
                   onClick={stopGeneration}
                 >
                   <StopIcon />
                 </Button>
                 <Button
+                  aria-label="Send message"
                   className="h-12 min-h-12 w-12 min-w-12 shrink-0 rounded-none p-0 [&_svg]:size-5"
                   disabled={!canSend}
                   size="icon"
-                  onClick={() => sendMessage()}
+                  type="submit"
                 >
                   <PaperPlaneTiltIcon />
                 </Button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       </div>

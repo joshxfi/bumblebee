@@ -222,7 +222,13 @@ export function clampCompactionSummary(text: string, maxChars = 1200) {
   if (trimmed.length <= maxChars) {
     return trimmed;
   }
-  return `${trimmed.slice(0, maxChars)}…`;
+  // Prefer cutting at the last word boundary so we don't truncate mid-word,
+  // but fall back to a hard clip if there's no reasonable break near the end.
+  const hardClip = trimmed.slice(0, maxChars);
+  const lastBreak = hardClip.lastIndexOf(" ");
+  const clipped =
+    lastBreak > maxChars * 0.6 ? hardClip.slice(0, lastBreak) : hardClip;
+  return `${clipped.trimEnd()}…`;
 }
 
 export type ContextWindowStats = {

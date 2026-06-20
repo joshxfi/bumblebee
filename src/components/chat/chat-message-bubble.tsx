@@ -49,6 +49,8 @@ export function ChatMessageBubble({
     >
       <div className="flex max-w-[88%] flex-col gap-1 sm:max-w-[72%]">
         <div
+          aria-busy={assistant ? message.state === "streaming" : undefined}
+          aria-live={assistant ? "polite" : undefined}
           className={`border px-4 py-3 text-sm/6 shadow-[0_6px_18px_rgba(0,0,0,0.16)] ${
             assistant
               ? "border-border bg-card text-foreground"
