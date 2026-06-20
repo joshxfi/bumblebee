@@ -130,6 +130,9 @@ export class ChatRuntimeClient implements ChatRuntime {
 
   reset() {
     this.worker.postMessage({ type: "reset" } satisfies WorkerRequest);
+    // Settle any in-flight awaiters (e.g. context compaction) that are waiting
+    // on a worker reply for a request the reset just cancelled.
+    this.emit({ type: "aborted" });
   }
 
   recreateWorker() {
@@ -141,6 +144,8 @@ export class ChatRuntimeClient implements ChatRuntime {
     this.worker.terminate();
     this.worker = this.createWorker();
     this.bindWorker(this.worker);
+    // The previous worker can no longer reply; release in-flight awaiters.
+    this.emit({ type: "aborted" });
   }
 
   dispose() {
@@ -149,6 +154,7 @@ export class ChatRuntimeClient implements ChatRuntime {
     this.requestPerf = null;
     this.unbindWorker(this.worker);
     this.worker.terminate();
+    this.emit({ type: "aborted" });
     this.listeners.clear();
   }
 

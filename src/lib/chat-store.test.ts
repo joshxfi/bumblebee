@@ -15,12 +15,23 @@ function requireRequestId(id: string | null | undefined): string {
   return id;
 }
 
-function createRuntimeStub(): ChatRuntime & {
+function createRuntimeStub(
+  options: { autoCompleteCompaction?: boolean } = {},
+): ChatRuntime & {
   events: Array<{ type: string; payload?: unknown }>;
   listeners: Set<(event: WorkerEvent) => void>;
 } {
+  const { autoCompleteCompaction = true } = options;
   const events: Array<{ type: string; payload?: unknown }> = [];
   const listeners = new Set<(event: WorkerEvent) => void>();
+
+  // Mirror ChatRuntimeClient: tearing the worker down releases in-flight
+  // awaiters (e.g. context compaction) with a synthetic abort event.
+  const emitAborted = () => {
+    for (const listener of [...listeners]) {
+      listener({ type: "aborted" });
+    }
+  };
 
   return {
     events,
@@ -38,7 +49,10 @@ function createRuntimeStub(): ChatRuntime & {
         payload: { requestId, modelId, messages, options },
       });
       queueMicrotask(() => {
-        if (String(requestId).startsWith("compact-")) {
+        if (
+          autoCompleteCompaction &&
+          String(requestId).startsWith("compact-")
+        ) {
           for (const listener of listeners) {
             listener({
               type: "complete",
@@ -56,9 +70,11 @@ function createRuntimeStub(): ChatRuntime & {
     }),
     recreateWorker: vi.fn(() => {
       events.push({ type: "recreateWorker" });
+      emitAborted();
     }),
     reset: vi.fn(() => {
       events.push({ type: "reset" });
+      emitAborted();
     }),
     stop: vi.fn(() => {
       events.push({ type: "stop" });
@@ -485,5 +501,83 @@ describe("chat store", () => {
     } satisfies WorkerEvent);
 
     expect(store.getState().messages.at(-1)?.content).toBe("");
+  });
+
+  it("does not start a stale generation when switching models mid-compaction", async () => {
+    const runtime = createRuntimeStub({ autoCompleteCompaction: false });
+    const store = createChatStore(runtime);
+
+    store.setState({
+      messages: Array.from({ length: 18 }, (_, index) => ({
+        content:
+          index % 2 === 0
+            ? `User turn ${index / 2 + 1}`
+            : `Assistant turn ${Math.ceil(index / 2)}`,
+        createdAt: index,
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        state: "done",
+      })),
+      runtimeStatus: "ready",
+    });
+
+    store.getState().sendMessage("Newest turn");
+    await flushMicrotasks();
+
+    // Summarization is in-flight (only the compaction request has been sent).
+    expect(runtime.generate).toHaveBeenCalledTimes(1);
+    expect(
+      String(vi.mocked(runtime.generate).mock.calls[0]?.[0]).startsWith(
+        "compact-",
+      ),
+    ).toBe(true);
+    expect(store.getState().isCompactingContext).toBe(true);
+
+    // User switches model before the summary returns. The recreateWorker abort
+    // settles the pending summary, and the epoch guard must drop the result.
+    store.getState().setSelectedModel("smollm2-135m");
+    await flushMicrotasks();
+
+    // No main generation fired, no stray streaming message left behind.
+    expect(runtime.generate).toHaveBeenCalledTimes(1);
+    expect(store.getState().isCompactingContext).toBe(false);
+    expect(store.getState().selectedModelId).toBe("smollm2-135m");
+    expect(
+      store
+        .getState()
+        .messages.some((message) => message.state === "streaming"),
+    ).toBe(false);
+    expect(store.getState().messages.at(-1)?.content).toBe("Newest turn");
+  });
+
+  it("settles compaction and clears state when the chat is cleared mid-compaction", async () => {
+    const runtime = createRuntimeStub({ autoCompleteCompaction: false });
+    const store = createChatStore(runtime);
+
+    store.setState({
+      messages: Array.from({ length: 18 }, (_, index) => ({
+        content:
+          index % 2 === 0
+            ? `User turn ${index / 2 + 1}`
+            : `Assistant turn ${Math.ceil(index / 2)}`,
+        createdAt: index,
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        state: "done",
+      })),
+      runtimeStatus: "ready",
+    });
+
+    store.getState().sendMessage("Newest turn");
+    await flushMicrotasks();
+    expect(runtime.generate).toHaveBeenCalledTimes(1);
+
+    store.getState().clearChat();
+    await flushMicrotasks();
+
+    // The stranded summary must not append a stray message into the cleared chat.
+    expect(runtime.generate).toHaveBeenCalledTimes(1);
+    expect(store.getState().messages).toHaveLength(0);
+    expect(store.getState().isCompactingContext).toBe(false);
   });
 });

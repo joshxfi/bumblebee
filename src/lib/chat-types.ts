@@ -132,4 +132,10 @@ export type WorkerEvent =
       requestId: string;
       finishReason: FinishReason;
     }
-  | { type: "error"; modelId?: ChatModelId; requestId?: string; error: string };
+  | { type: "error"; modelId?: ChatModelId; requestId?: string; error: string }
+  /**
+   * Synthesized client-side (never emitted by the worker) when the worker is
+   * reset, recreated, or disposed. Lets in-flight awaiters (e.g. context
+   * compaction) settle instead of hanging on a worker that will never reply.
+   */
+  | { type: "aborted" };

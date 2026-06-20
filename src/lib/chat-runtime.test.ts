@@ -68,6 +68,30 @@ describe("chat runtime", () => {
     runtime.dispose();
   });
 
+  it("emits an abort event to subscribers when the worker is torn down", () => {
+    const firstWorker = new WorkerDouble();
+    const secondWorker = new WorkerDouble();
+    const createWorker = vi
+      .fn<() => WorkerDouble>()
+      .mockReturnValueOnce(firstWorker)
+      .mockReturnValueOnce(secondWorker);
+    const runtime = new ChatRuntimeClient(
+      createWorker as unknown as () => Worker,
+    );
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+
+    runtime.reset();
+    runtime.recreateWorker();
+
+    expect(listener).toHaveBeenCalledWith({ type: "aborted" });
+    expect(
+      listener.mock.calls.filter(([event]) => event?.type === "aborted"),
+    ).toHaveLength(2);
+
+    runtime.dispose();
+  });
+
   it("recreates the worker when asked", () => {
     const firstWorker = new WorkerDouble();
     const secondWorker = new WorkerDouble();

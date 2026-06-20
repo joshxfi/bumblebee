@@ -202,6 +202,17 @@ type CompactionPayloadResult = {
   rollingSummary: string;
 };
 
+/**
+ * Safety net for the rolling-summary pass. The abort event settles this
+ * promptly on worker teardown; this guards the rare case where a worker stops
+ * replying without ever emitting a terminal (or abort) event.
+ */
+const COMPACTION_SUMMARY_TIMEOUT_MS = 120_000;
+
+function now() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
 async function runRollingSummaryGeneration(
   runtime: ChatRuntime,
   modelId: ChatModelId,
@@ -219,52 +230,55 @@ async function runRollingSummaryGeneration(
   );
   const requestId = `compact-${createId()}`;
   const compactionGeneration = getModelConfig(modelId).compactionSummarize;
-  const startedAt =
-    typeof performance !== "undefined" ? performance.now() : Date.now();
+  const startedAt = now();
 
   return new Promise((resolve) => {
     let buffer = "";
-    const unsub = runtime.subscribe((event) => {
-      const eventRequestId =
-        event.type === "token" || event.type === "complete"
-          ? event.requestId
-          : event.type === "error"
-            ? event.requestId
-            : undefined;
+    let settled = false;
+    let unsub: () => void = () => undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-      if (eventRequestId !== requestId) {
+    const finish = (summary: string) => {
+      if (settled) {
         return;
       }
-
-      if (event.type === "token") {
-        buffer += event.text;
-        return;
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
       }
+      unsub();
+      resolve({ ms: now() - startedAt, summary });
+    };
 
-      if (event.type === "complete") {
-        unsub();
-        const merged = buffer.trim() || priorSummary;
-        resolve({
-          ms:
-            (typeof performance !== "undefined"
-              ? performance.now()
-              : Date.now()) - startedAt,
-          summary: clampCompactionSummary(merged),
-        });
+    unsub = runtime.subscribe((event) => {
+      // Worker was reset/recreated/disposed mid-summary: fall back gracefully
+      // instead of waiting on a reply that will never arrive.
+      if (event.type === "aborted") {
+        finish(priorSummary);
         return;
       }
 
       if (event.type === "error") {
-        unsub();
-        resolve({
-          ms:
-            (typeof performance !== "undefined"
-              ? performance.now()
-              : Date.now()) - startedAt,
-          summary: priorSummary,
-        });
+        // Our request failed, or the whole worker crashed (no requestId).
+        if (!event.requestId || event.requestId === requestId) {
+          finish(priorSummary);
+        }
+        return;
+      }
+
+      if (event.type === "token" && event.requestId === requestId) {
+        buffer += event.text;
+        return;
+      }
+
+      if (event.type === "complete" && event.requestId === requestId) {
+        finish(clampCompactionSummary(buffer.trim() || priorSummary));
       }
     });
+
+    timeoutId = setTimeout(() => {
+      finish(priorSummary);
+    }, COMPACTION_SUMMARY_TIMEOUT_MS);
 
     runtime.generate(requestId, modelId, summarizeMessages, {
       generationOverrides: compactionGeneration,
@@ -469,9 +483,19 @@ export function createChatStore(
 ) {
   const initialState = createBaseState(options.deviceProfile);
 
+  // Bumped whenever an action invalidates in-flight async work (model switch,
+  // clear, cancel). The fire-and-forget compaction pipelines capture the epoch
+  // and bail if it changed before they resolve, so a stale summary can never
+  // start a generation or append into a conversation that already moved on.
+  let generationEpoch = 0;
+  const invalidateGeneration = () => {
+    generationEpoch += 1;
+  };
+
   return createStore<ChatStoreState>((set, get) => ({
     ...initialState,
     clearChat: () => {
+      invalidateGeneration();
       runtime.reset();
 
       set((state) => ({
@@ -527,6 +551,7 @@ export function createChatStore(
       });
 
       void (async () => {
+        const epoch = generationEpoch;
         if (willRunCompactionSummarize) {
           set({ isCompactingContext: true });
         }
@@ -538,6 +563,10 @@ export function createChatStore(
             runtime,
           });
 
+          if (epoch !== generationEpoch) {
+            return;
+          }
+
           set({ rollingContextSummary: payload.rollingSummary });
 
           runtime.generate(targetMessage.id, modelId, payload.modelMessages, {
@@ -545,7 +574,9 @@ export function createChatStore(
             compactionSummarizeMs: payload.compactionSummarizeMs,
           });
         } finally {
-          set({ isCompactingContext: false });
+          if (epoch === generationEpoch) {
+            set({ isCompactingContext: false });
+          }
         }
       })();
     },
@@ -598,6 +629,7 @@ export function createChatStore(
         nextComposer = prev.content;
       }
 
+      invalidateGeneration();
       runtime.reset();
       runtime.recreateWorker();
 
@@ -608,6 +640,7 @@ export function createChatStore(
         composer: nextComposer,
         error: null,
         hasLoadedModel: false,
+        isCompactingContext: false,
         loadProgress: null,
         messages: nextMessages,
         pendingStop: false,
@@ -650,6 +683,7 @@ export function createChatStore(
           .length > 0;
 
       void (async () => {
+        const epoch = generationEpoch;
         if (willRunCompactionSummarize) {
           set({ isCompactingContext: true });
         }
@@ -660,6 +694,10 @@ export function createChatStore(
             priorRollingSummary: state.rollingContextSummary,
             runtime,
           });
+
+          if (epoch !== generationEpoch) {
+            return;
+          }
 
           set({ rollingContextSummary: payload.rollingSummary });
 
@@ -673,7 +711,9 @@ export function createChatStore(
             },
           );
         } finally {
-          set({ isCompactingContext: false });
+          if (epoch === generationEpoch) {
+            set({ isCompactingContext: false });
+          }
         }
       })();
     },
@@ -721,6 +761,7 @@ export function createChatStore(
       });
 
       void (async () => {
+        const epoch = generationEpoch;
         if (willRunCompactionSummarize) {
           set({ isCompactingContext: true });
         }
@@ -732,6 +773,10 @@ export function createChatStore(
             runtime,
             userMessage,
           });
+
+          if (epoch !== generationEpoch) {
+            return;
+          }
 
           set({ rollingContextSummary: payload.rollingSummary });
 
@@ -745,7 +790,9 @@ export function createChatStore(
             },
           );
         } finally {
-          set({ isCompactingContext: false });
+          if (epoch === generationEpoch) {
+            set({ isCompactingContext: false });
+          }
         }
       })();
     },
@@ -765,6 +812,7 @@ export function createChatStore(
         runtime.stop();
       }
 
+      invalidateGeneration();
       runtime.reset();
       runtime.recreateWorker();
 
@@ -826,7 +874,10 @@ function eventTargetsSelectedModel(
   state: ChatStoreState,
   event: WorkerEvent,
 ): boolean {
-  return event.modelId === undefined || event.modelId === state.selectedModelId;
+  if (!("modelId" in event) || event.modelId === undefined) {
+    return true;
+  }
+  return event.modelId === state.selectedModelId;
 }
 
 export function applyWorkerEvent(
@@ -951,6 +1002,13 @@ export function applyWorkerEvent(
           runtimeStatus: "error",
         };
       });
+      return;
+    }
+
+    // Worker teardown signal. In-flight awaiters (context compaction) settle
+    // themselves; nothing to reconcile in the store here.
+    case "aborted": {
+      return;
     }
   }
 }
