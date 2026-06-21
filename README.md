@@ -64,10 +64,16 @@ All checkpoints below are **q4** ONNX builds from the [`onnx-community`](https:/
 - **LFM2 350M** — `onnx-community/LFM2-350M-ONNX` — mobile + desktop
 - **LFM2 700M** — `onnx-community/LFM2-700M-ONNX` — desktop only
 - **LFM2 1.2B** — `onnx-community/LFM2-1.2B-ONNX` — desktop only
+- **LFM2 2.6B** — `onnx-community/LFM2-2.6B-ONNX` — desktop only
 
 ### Llama
 
 - **Llama 3.2 1B** — `onnx-community/Llama-3.2-1B-Instruct-ONNX` — desktop only
+
+### Granite
+
+- **Granite 4.0 350M** — `onnx-community/granite-4.0-350m-ONNX-web` — mobile + desktop
+- **Granite 4.0 1B** — `onnx-community/granite-4.0-1b-ONNX-web` — desktop only
 
 ### TinySwallow
 
