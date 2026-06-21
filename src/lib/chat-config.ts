@@ -383,6 +383,75 @@ const desktopFlagshipModel: ChatModelConfig = {
   supportsMobile: false,
 };
 
+const qwen35Model: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "Qwen3.5 instruct upgrade over Qwen3 0.6B with strong multilingual coverage in a browser-friendly size.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 192,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.7,
+    top_p: 0.9,
+  },
+  historyTurns: 8,
+  id: "qwen3.5-0.8b",
+  maxPromptChars: 8500,
+  label: "Qwen3.5 0.8B",
+  modelId: "onnx-community/Qwen3.5-0.8B-ONNX",
+  shortLabel: "Qwen3.5",
+  supportsDesktop: true,
+  supportsMobile: true,
+};
+
+const granite4Nano350mModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "IBM Granite 4.0 Nano instruct (~350M) for fast instruction-following chat on modest or mobile hardware.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 168,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.7,
+    top_p: 0.9,
+  },
+  historyTurns: 8,
+  id: "granite-4.0-350m",
+  maxPromptChars: 8500,
+  label: "Granite 4.0 350M",
+  modelId: "onnx-community/granite-4.0-350m-ONNX-web",
+  shortLabel: "Granite350M",
+  supportsDesktop: true,
+  supportsMobile: true,
+};
+
+const granite4Nano1bModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "IBM Granite 4.0 Nano instruct (~1.6B dense) for stronger instruction following on desktop.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 224,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.68,
+    top_p: 0.9,
+  },
+  historyTurns: 10,
+  id: "granite-4.0-1b",
+  maxPromptChars: 11000,
+  label: "Granite 4.0 1B",
+  modelId: "onnx-community/granite-4.0-1b-ONNX-web",
+  shortLabel: "Granite1B",
+  supportsDesktop: true,
+  supportsMobile: false,
+};
+
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "smollm2-135m": mobileModel,
   "smollm2-360m": smallQualityModel,
@@ -400,6 +469,9 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "tinyswallow-1.5b-instruct": tinySwallowModel,
   "bonsai-1.7b": bonsaiModel,
   "lfm2-2.6b": desktopFlagshipModel,
+  "qwen3.5-0.8b": qwen35Model,
+  "granite-4.0-350m": granite4Nano350mModel,
+  "granite-4.0-1b": granite4Nano1bModel,
 };
 
 export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-5-350m";
@@ -424,6 +496,7 @@ const PROVIDER_GROUP_ORDER = [
   "Falcon",
   "LFM",
   "Llama",
+  "Granite",
   "TinySwallow",
   "Bonsai",
 ] as const;
@@ -433,6 +506,7 @@ const PROVIDER_GROUP_DESCRIPTIONS = {
   Falcon:
     "TII Falcon H1 tiny instruct and multilingual instruct for edge-friendly chat.",
   Gemma: "Google's open Gemma checkpoints for chat and text generation.",
+  Granite: "IBM Granite 4.0 Nano instruct models for efficient on-device chat.",
   LFM: "Liquid AI LFM models tuned for efficient in-browser inference.",
   Llama: "Meta Llama open-weight instruct models for assistant-style chat.",
   Qwen: "Alibaba Qwen compact models with strong multilingual coverage.",
@@ -460,6 +534,9 @@ export function getModelProviderGroup(id: ChatModelId): string {
     case "gemma-3-1b-it":
     case "gemma-3-270m-it":
       return "Gemma";
+    case "granite-4.0-1b":
+    case "granite-4.0-350m":
+      return "Granite";
     case "lfm2-1.2b":
     case "lfm2-2.6b":
     case "lfm2-350m":
@@ -470,6 +547,7 @@ export function getModelProviderGroup(id: ChatModelId): string {
       return "Llama";
     case "qwen2.5-0.5b":
     case "qwen3-0.6b":
+    case "qwen3.5-0.8b":
       return "Qwen";
     case "smollm2-135m":
     case "smollm2-360m":

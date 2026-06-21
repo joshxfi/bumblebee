@@ -330,6 +330,9 @@ describe("chat store", () => {
       "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
       "lfm2-2.6b",
+      "qwen3.5-0.8b",
+      "granite-4.0-350m",
+      "granite-4.0-1b",
     ]);
     expect(
       store
@@ -344,6 +347,7 @@ describe("chat store", () => {
       "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
       "lfm2-2.6b",
+      "granite-4.0-1b",
     ] as const) {
       expect(
         store.getState().availableModels.find((model) => model.id === modelId)
@@ -380,6 +384,9 @@ describe("chat store", () => {
       "TinySwallow 1.5B",
       "Bonsai 1.7B",
       "LFM2 2.6B",
+      "Qwen3.5 0.8B",
+      "Granite 4.0 350M",
+      "Granite 4.0 1B",
     ]);
   });
 

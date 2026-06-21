@@ -7,6 +7,8 @@ export type ChatModelId =
   | "falcon-h1-tiny-multilingual-100m-instruct"
   | "gemma-3-1b-it"
   | "gemma-3-270m-it"
+  | "granite-4.0-1b"
+  | "granite-4.0-350m"
   | "lfm2-1.2b"
   | "lfm2-2.6b"
   | "lfm2-350m"
@@ -15,6 +17,7 @@ export type ChatModelId =
   | "llama-3.2-1b-instruct"
   | "qwen2.5-0.5b"
   | "qwen3-0.6b"
+  | "qwen3.5-0.8b"
   | "smollm2-135m"
   | "smollm2-360m"
   | "tinyswallow-1.5b-instruct";
