@@ -17,7 +17,6 @@ export type ChatModelId =
   | "llama-3.2-1b-instruct"
   | "qwen2.5-0.5b"
   | "qwen3-0.6b"
-  | "qwen3.5-0.8b"
   | "smollm2-135m"
   | "smollm2-360m"
   | "tinyswallow-1.5b-instruct";

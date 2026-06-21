@@ -90,7 +90,7 @@ const desktopQualityModel: ChatModelConfig = {
 const desktopExperimentalModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
-    "Strongest local desktop option in the current Bumblebee catalog.",
+    "Higher-capacity LFM2 for stronger, more detailed desktop answers.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -383,29 +383,6 @@ const desktopFlagshipModel: ChatModelConfig = {
   supportsMobile: false,
 };
 
-const qwen35Model: ChatModelConfig = {
-  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
-  description:
-    "Qwen3.5 instruct upgrade over Qwen3 0.6B with strong multilingual coverage in a browser-friendly size.",
-  dtype: "q4",
-  generation: {
-    do_sample: true,
-    max_new_tokens: 192,
-    repetition_penalty: 1.08,
-    return_full_text: false,
-    temperature: 0.7,
-    top_p: 0.9,
-  },
-  historyTurns: 8,
-  id: "qwen3.5-0.8b",
-  maxPromptChars: 8500,
-  label: "Qwen3.5 0.8B",
-  modelId: "onnx-community/Qwen3.5-0.8B-ONNX",
-  shortLabel: "Qwen3.5",
-  supportsDesktop: true,
-  supportsMobile: true,
-};
-
 const granite4Nano350mModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
@@ -469,7 +446,6 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "tinyswallow-1.5b-instruct": tinySwallowModel,
   "bonsai-1.7b": bonsaiModel,
   "lfm2-2.6b": desktopFlagshipModel,
-  "qwen3.5-0.8b": qwen35Model,
   "granite-4.0-350m": granite4Nano350mModel,
   "granite-4.0-1b": granite4Nano1bModel,
 };
@@ -547,7 +523,6 @@ export function getModelProviderGroup(id: ChatModelId): string {
       return "Llama";
     case "qwen2.5-0.5b":
     case "qwen3-0.6b":
-    case "qwen3.5-0.8b":
       return "Qwen";
     case "smollm2-135m":
     case "smollm2-360m":
