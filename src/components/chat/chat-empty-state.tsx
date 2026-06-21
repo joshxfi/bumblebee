@@ -1,15 +1,15 @@
-import { ArrowUpRightIcon } from "@phosphor-icons/react"
+import { ArrowUpRightIcon } from "@phosphor-icons/react";
 
-import { starterPrompts } from "@/components/chat/chat-ui"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { PROJECT_AUTHOR, PROJECT_REPO_URL } from "@/lib/site-meta"
+import { starterPrompts } from "@/components/chat/chat-ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PROJECT_AUTHOR, PROJECT_REPO_URL } from "@/lib/site-meta";
 
 type ChatEmptyStateProps = {
-  busy: boolean
-  currentModelLabel: string
-  onPrompt: (prompt: string) => void
-}
+  busy: boolean;
+  currentModelLabel: string;
+  onPrompt: (prompt: string) => void;
+};
 
 export function ChatEmptyState({
   busy,
@@ -29,8 +29,7 @@ export function ChatEmptyState({
           Start chatting with Bumblebee
         </h1>
         <p className="text-sm/6 text-muted-foreground">
-          Everything stays in this tab. Pick a starter or type your own
-          message.
+          Everything stays in this tab. Pick a starter or type your own message.
         </p>
       </div>
 
@@ -72,5 +71,5 @@ export function ChatEmptyState({
         </p>
       </div>
     </div>
-  )
+  );
 }

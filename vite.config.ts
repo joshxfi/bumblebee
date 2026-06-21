@@ -1,10 +1,10 @@
-import path from "node:path"
-import { fileURLToPath } from "node:url"
-import tailwindcss from "@tailwindcss/vite"
-import react from "@vitejs/plugin-react"
-import { defineConfig } from "vitest/config"
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 
-const root = path.dirname(fileURLToPath(import.meta.url))
+const root = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,7 +13,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) {
-            return
+            return;
           }
 
           if (
@@ -21,11 +21,11 @@ export default defineConfig({
             id.includes("/react-dom/") ||
             id.includes("/scheduler/")
           ) {
-            return "react-vendor"
+            return "react-vendor";
           }
 
           if (id.includes("/streamdown/")) {
-            return "markdown-vendor"
+            return "markdown-vendor";
           }
         },
       },
@@ -46,7 +46,7 @@ export default defineConfig({
       // onnxruntime-node/sharp and crashes in the browser. Force the web entry.
       "@huggingface/transformers": path.resolve(
         root,
-        "node_modules/@huggingface/transformers/dist/transformers.web.js"
+        "node_modules/@huggingface/transformers/dist/transformers.web.js",
       ),
     },
   },
@@ -54,4 +54,4 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
   },
-})
+});

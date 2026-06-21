@@ -2,20 +2,20 @@ import {
   ArrowClockwiseIcon,
   CheckIcon,
   CopySimpleIcon,
-} from "@phosphor-icons/react"
+} from "@phosphor-icons/react";
 
-import { formatTimestamp } from "@/components/chat/chat-ui"
-import { MarkdownMessage } from "@/components/markdown-message"
-import { Button } from "@/components/ui/button"
-import type { ChatMessage } from "@/lib/chat-types"
+import { formatTimestamp } from "@/components/chat/chat-ui";
+import { MarkdownMessage } from "@/components/markdown-message";
+import { Button } from "@/components/ui/button";
+import type { ChatMessage } from "@/lib/chat-types";
 
 type ChatMessageBubbleProps = {
-  canContinue: boolean
-  copyState: "copied" | "error" | null
-  message: ChatMessage
-  onContinue: () => void
-  onCopy: (message: ChatMessage) => void
-}
+  canContinue: boolean;
+  copyState: "copied" | "error" | null;
+  message: ChatMessage;
+  onContinue: () => void;
+  onCopy: (message: ChatMessage) => void;
+};
 
 export function ChatMessageBubble({
   canContinue,
@@ -24,20 +24,22 @@ export function ChatMessageBubble({
   onContinue,
   onCopy,
 }: ChatMessageBubbleProps) {
-  const assistant = message.role === "assistant"
+  const assistant = message.role === "assistant";
   const showPendingPlaceholder =
     assistant &&
     message.state === "streaming" &&
-    message.content.trim().length === 0
+    message.content.trim().length === 0;
   const fallbackContent =
     message.content ||
-    (message.state === "error" ? "Response failed before any text arrived." : "")
-  const canCopy = assistant && message.content.trim().length > 0
-  const hitLengthLimit = assistant && message.finishReason === "length"
+    (message.state === "error"
+      ? "Response failed before any text arrived."
+      : "");
+  const canCopy = assistant && message.content.trim().length > 0;
+  const hitLengthLimit = assistant && message.finishReason === "length";
   const renderPlainStreaming =
     assistant &&
     message.state === "streaming" &&
-    message.content.trim().length > 0
+    message.content.trim().length > 0;
 
   return (
     <article
@@ -47,6 +49,8 @@ export function ChatMessageBubble({
     >
       <div className="flex max-w-[88%] flex-col gap-1 sm:max-w-[72%]">
         <div
+          aria-busy={assistant ? message.state === "streaming" : undefined}
+          aria-live={assistant ? "polite" : undefined}
           className={`border px-4 py-3 text-sm/6 shadow-[0_6px_18px_rgba(0,0,0,0.16)] ${
             assistant
               ? "border-border bg-card text-foreground"
@@ -55,13 +59,12 @@ export function ChatMessageBubble({
         >
           {showPendingPlaceholder ? (
             <div className="bumblebee-waiting">
-              <span
-                aria-hidden="true"
-                className="bumblebee-waiting__bee"
-              >
+              <span aria-hidden="true" className="bumblebee-waiting__bee">
                 🐝
               </span>
-              <span className="bumblebee-waiting__label">Bumblebee is thinking</span>
+              <span className="bumblebee-waiting__label">
+                Bumblebee is thinking
+              </span>
               <span aria-hidden="true" className="bumblebee-waiting__dots">
                 <span />
                 <span />
@@ -134,5 +137,5 @@ export function ChatMessageBubble({
         </div>
       </div>
     </article>
-  )
+  );
 }

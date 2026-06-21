@@ -1,46 +1,46 @@
-import { GaugeIcon } from "@phosphor-icons/react"
+import { GaugeIcon } from "@phosphor-icons/react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTitle,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import type { ChatPerfSample } from "@/lib/chat-types"
+} from "@/components/ui/popover";
+import type { ChatPerfSample } from "@/lib/chat-types";
 
 type ChatPerfOverlayProps = {
-  contextWindowLabel?: string | null
-  sample: ChatPerfSample | null
-}
+  contextWindowLabel?: string | null;
+  sample: ChatPerfSample | null;
+};
 
 function formatMs(value?: number) {
-  return typeof value === "number" ? `${Math.round(value)}ms` : "—"
+  return typeof value === "number" ? `${Math.round(value)}ms` : "—";
 }
 
 function formatRate(value?: number) {
-  return typeof value === "number" ? `${value.toFixed(1)} tok/s` : "—"
+  return typeof value === "number" ? `${value.toFixed(1)} tok/s` : "—";
 }
 
 function PerfIconTrigger({ sample }: { sample: ChatPerfSample }) {
   const headline =
     sample.kind === "load"
       ? `Model load ${formatMs(sample.modelLoadMs)}`
-      : `Generation ${formatRate(sample.tokensPerSec)}`
+      : `Generation ${formatRate(sample.tokensPerSec)}`;
   return (
     <>
       <GaugeIcon aria-hidden className="size-5" />
       <span className="sr-only">Performance. {headline}</span>
     </>
-  )
+  );
 }
 
 function PerfDetailsBody({
   contextWindowLabel,
   sample,
 }: {
-  contextWindowLabel?: string | null
-  sample: ChatPerfSample
+  contextWindowLabel?: string | null;
+  sample: ChatPerfSample;
 }) {
   return (
     <>
@@ -132,7 +132,7 @@ function PerfDetailsBody({
         )}
       </div>
     </>
-  )
+  );
 }
 
 export function ChatPerfOverlay({
@@ -140,7 +140,7 @@ export function ChatPerfOverlay({
   sample,
 }: ChatPerfOverlayProps) {
   if (!sample) {
-    return null
+    return null;
   }
 
   return (
@@ -177,5 +177,5 @@ export function ChatPerfOverlay({
         />
       </PopoverContent>
     </Popover>
-  )
+  );
 }

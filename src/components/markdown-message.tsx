@@ -1,24 +1,24 @@
-import type { ComponentPropsWithoutRef } from "react"
-import "streamdown/styles.css"
+import type { ComponentPropsWithoutRef } from "react";
+import "streamdown/styles.css";
 import {
-  Streamdown,
-  defaultUrlTransform,
   type Components,
+  defaultUrlTransform,
+  Streamdown,
   type UrlTransform,
-} from "streamdown"
+} from "streamdown";
 
 const safeUrlTransform: UrlTransform = (url, key, node) => {
   if (!url.startsWith("https://")) {
-    return null
+    return null;
   }
 
-  return defaultUrlTransform(url, key, node)
-}
+  return defaultUrlTransform(url, key, node);
+};
 
 const markdownComponents: Components = {
   a: ({ children, href, ...props }) => {
     if (!href?.startsWith("https://")) {
-      return <span>{children}</span>
+      return <span>{children}</span>;
     }
 
     return (
@@ -30,14 +30,14 @@ const markdownComponents: Components = {
       >
         {children}
       </a>
-    )
+    );
   },
-}
+};
 
 type MarkdownMessageProps = {
-  content: string
-  streaming?: boolean
-} & Pick<ComponentPropsWithoutRef<"div">, "className">
+  content: string;
+  streaming?: boolean;
+} & Pick<ComponentPropsWithoutRef<"div">, "className">;
 
 export function MarkdownMessage({
   className,
@@ -57,5 +57,5 @@ export function MarkdownMessage({
     >
       {content}
     </Streamdown>
-  )
+  );
 }

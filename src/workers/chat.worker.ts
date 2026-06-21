@@ -1,13 +1,13 @@
 import {
   env,
   InterruptableStoppingCriteria,
+  type PretrainedModelOptions,
   pipeline,
   StoppingCriteriaList,
   TextStreamer,
-  type PretrainedModelOptions,
-} from "@huggingface/transformers"
+} from "@huggingface/transformers";
 
-import { getModelConfig } from "@/lib/chat-config"
+import { getModelConfig } from "@/lib/chat-config";
 import type {
   ChatDevice,
   ChatGenerationOverrides,
@@ -16,56 +16,56 @@ import type {
   ModelMessage,
   WorkerEvent,
   WorkerRequest,
-} from "@/lib/chat-types"
+} from "@/lib/chat-types";
 
-type Generator = Awaited<ReturnType<typeof pipeline<"text-generation">>>
+type Generator = Awaited<ReturnType<typeof pipeline<"text-generation">>>;
 
 type ProgressPayload = {
-  file?: string
-  loaded?: number
-  name?: string
-  progress?: number
-  status?: string
-  total?: number
-}
+  file?: string;
+  loaded?: number;
+  name?: string;
+  progress?: number;
+  status?: string;
+  total?: number;
+};
 
 type WebGpuNavigator = Navigator & {
   gpu?: {
-    requestAdapter: () => Promise<unknown>
-  }
-}
+    requestAdapter: () => Promise<unknown>;
+  };
+};
 
-env.allowLocalModels = false
-env.useBrowserCache = true
+env.allowLocalModels = false;
+env.useBrowserCache = true;
 
-const STREAM_FLUSH_INTERVAL_MS = 40
-const STREAM_FLUSH_THRESHOLD_CHARS = 48
+const STREAM_FLUSH_INTERVAL_MS = 40;
+const STREAM_FLUSH_THRESHOLD_CHARS = 48;
 
-let generator: Generator | null = null
-let loadedModelId: ChatModelId | null = null
-let loadPromise: Promise<Generator> | null = null
-let loadingModelId: ChatModelId | null = null
-let activeRequestId: string | null = null
-let activeDevice: ChatDevice = "wasm"
-let bufferedText = ""
-let bufferedModelId: ChatModelId | null = null
-let bufferedRequestId: string | null = null
-let flushTimeoutId: number | null = null
-const interruptable = new InterruptableStoppingCriteria()
+let generator: Generator | null = null;
+let loadedModelId: ChatModelId | null = null;
+let loadPromise: Promise<Generator> | null = null;
+let loadingModelId: ChatModelId | null = null;
+let activeRequestId: string | null = null;
+let activeDevice: ChatDevice = "wasm";
+let bufferedText = "";
+let bufferedModelId: ChatModelId | null = null;
+let bufferedRequestId: string | null = null;
+let flushTimeoutId: number | null = null;
+const interruptable = new InterruptableStoppingCriteria();
 
 function postMessage(event: WorkerEvent) {
-  self.postMessage(event)
+  self.postMessage(event);
 }
 
 function clearFlushTimeout() {
   if (flushTimeoutId !== null) {
-    clearTimeout(flushTimeoutId)
-    flushTimeoutId = null
+    clearTimeout(flushTimeoutId);
+    flushTimeoutId = null;
   }
 }
 
 function flushBufferedText() {
-  clearFlushTimeout()
+  clearFlushTimeout();
 
   if (
     !bufferedText ||
@@ -73,10 +73,10 @@ function flushBufferedText() {
     !bufferedRequestId ||
     activeRequestId !== bufferedRequestId
   ) {
-    bufferedText = ""
-    bufferedModelId = null
-    bufferedRequestId = null
-    return
+    bufferedText = "";
+    bufferedModelId = null;
+    bufferedRequestId = null;
+    return;
   }
 
   postMessage({
@@ -84,55 +84,55 @@ function flushBufferedText() {
     modelId: bufferedModelId,
     requestId: bufferedRequestId,
     text: bufferedText,
-  })
+  });
 
-  bufferedText = ""
-  bufferedModelId = null
-  bufferedRequestId = null
+  bufferedText = "";
+  bufferedModelId = null;
+  bufferedRequestId = null;
 }
 
 function bufferChunk(modelId: ChatModelId, requestId: string, text: string) {
   if (!text || activeRequestId !== requestId) {
-    return
+    return;
   }
 
-  bufferedText += text
-  bufferedModelId = modelId
-  bufferedRequestId = requestId
+  bufferedText += text;
+  bufferedModelId = modelId;
+  bufferedRequestId = requestId;
 
   if (bufferedText.length >= STREAM_FLUSH_THRESHOLD_CHARS) {
-    flushBufferedText()
-    return
+    flushBufferedText();
+    return;
   }
 
   if (flushTimeoutId === null) {
     flushTimeoutId = self.setTimeout(() => {
-      flushBufferedText()
-    }, STREAM_FLUSH_INTERVAL_MS)
+      flushBufferedText();
+    }, STREAM_FLUSH_INTERVAL_MS);
   }
 }
 
 async function getDeviceCandidates(): Promise<ChatDevice[]> {
   const webGpuNavigator =
-    typeof navigator !== "undefined" ? (navigator as WebGpuNavigator) : null
+    typeof navigator !== "undefined" ? (navigator as WebGpuNavigator) : null;
 
   if (webGpuNavigator?.gpu) {
     try {
-      const adapter = await webGpuNavigator.gpu.requestAdapter()
+      const adapter = await webGpuNavigator.gpu.requestAdapter();
       if (adapter) {
-        return ["webgpu", "wasm"]
+        return ["webgpu", "wasm"];
       }
     } catch {
       // Ignore and fall through to WASM.
     }
   }
 
-  return ["wasm"]
+  return ["wasm"];
 }
 
 function normalizeProgress(
   payload: ProgressPayload,
-  detail: string
+  detail: string,
 ): ModelLoadProgress {
   return {
     detail,
@@ -151,37 +151,37 @@ function normalizeProgress(
           ? Math.round((payload.loaded / payload.total) * 100)
           : null,
     total: payload.total,
-  }
+  };
 }
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
-    return error.message
+    return error.message;
   }
 
   if (typeof error === "string") {
-    return error
+    return error;
   }
 
-  return "Model execution failed."
+  return "Model execution failed.";
 }
 
 async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
   if (generator && loadedModelId === modelId) {
-    return generator
+    return generator;
   }
 
   if (loadPromise && loadingModelId === modelId) {
-    return loadPromise
+    return loadPromise;
   }
 
-  const candidates = await getDeviceCandidates()
-  const model = getModelConfig(modelId)
-  performance.mark(`worker-model-load-start:${modelId}`)
+  const candidates = await getDeviceCandidates();
+  const model = getModelConfig(modelId);
+  performance.mark(`worker-model-load-start:${modelId}`);
 
-  loadingModelId = modelId
+  loadingModelId = modelId;
   loadPromise = (async () => {
-    let lastError: unknown = null
+    let lastError: unknown = null;
 
     for (const candidate of candidates) {
       try {
@@ -196,14 +196,14 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
                 ? `Trying WebGPU first for ${model.label}.`
                 : `Loading ${model.label} with the CPU/WASM runtime.`,
           },
-        })
+        });
 
         const options: PretrainedModelOptions = {
           device: candidate,
           dtype: model.dtype,
           progress_callback: (payload: ProgressPayload) => {
             if (payload.status === "ready") {
-              return
+              return;
             }
 
             postMessage({
@@ -213,32 +213,36 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
                 payload,
                 candidate === "webgpu"
                   ? `Loading ${model.label} for WebGPU.`
-                  : `Loading ${model.label} for mobile-safe CPU inference.`
+                  : `Loading ${model.label} for mobile-safe CPU inference.`,
               ),
-            })
+            });
           },
-        }
+        };
 
-        const loaded = await pipeline("text-generation", model.modelId, options)
+        const loaded = await pipeline(
+          "text-generation",
+          model.modelId,
+          options,
+        );
         performance.measure(
           `worker-model-load:${modelId}`,
-          `worker-model-load-start:${modelId}`
-        )
+          `worker-model-load-start:${modelId}`,
+        );
 
-        generator = loaded
-        loadedModelId = modelId
-        activeDevice = candidate
+        generator = loaded;
+        loadedModelId = modelId;
+        activeDevice = candidate;
 
         postMessage({
           type: "ready",
           modelId,
           device: activeDevice,
           dtype: model.dtype,
-        })
+        });
 
-        return loaded
+        return loaded;
       } catch (error) {
-        lastError = error
+        lastError = error;
 
         if (candidate === "webgpu") {
           postMessage({
@@ -249,79 +253,78 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
               progress: null,
               detail: "WebGPU failed. Falling back to CPU/WASM.",
             },
-          })
-          continue
+          });
         }
       }
     }
 
-    throw lastError ?? new Error("Unable to initialize the chat model.")
+    throw lastError ?? new Error("Unable to initialize the chat model.");
   })().finally(() => {
-    loadPromise = null
-    loadingModelId = null
-  })
+    loadPromise = null;
+    loadingModelId = null;
+  });
 
-  return loadPromise
+  return loadPromise;
 }
 
 function mergeGenerationOptions(
   base: ReturnType<typeof getModelConfig>["generation"],
-  overrides?: ChatGenerationOverrides
+  overrides?: ChatGenerationOverrides,
 ) {
   return {
     ...base,
     ...overrides,
-  }
+  };
 }
 
 async function runGeneration(
   requestId: string,
   modelId: ChatModelId,
   messages: ModelMessage[],
-  generationOverrides?: ChatGenerationOverrides
+  generationOverrides?: ChatGenerationOverrides,
 ) {
-  activeRequestId = requestId
-  bufferedText = ""
-  bufferedModelId = modelId
-  bufferedRequestId = requestId
+  activeRequestId = requestId;
+  bufferedText = "";
+  bufferedModelId = modelId;
+  bufferedRequestId = requestId;
 
   try {
-    const activeGenerator = await loadGenerator(modelId)
-    const model = getModelConfig(modelId)
+    const activeGenerator = await loadGenerator(modelId);
+    const model = getModelConfig(modelId);
     const generationOptions = mergeGenerationOptions(
       model.generation,
-      generationOverrides
-    )
-    interruptable.reset()
-    performance.mark(`worker-generation-start:${requestId}`)
+      generationOverrides,
+    );
+    interruptable.reset();
+    performance.mark(`worker-generation-start:${requestId}`);
 
-    const stoppingCriteria = new StoppingCriteriaList()
-    stoppingCriteria.push(interruptable)
-    let generatedTokenCount = 0
+    const stoppingCriteria = new StoppingCriteriaList();
+    stoppingCriteria.push(interruptable);
+    let generatedTokenCount = 0;
 
     const streamer = new TextStreamer(activeGenerator.tokenizer, {
       callback_function: (text) => {
-        bufferChunk(modelId, requestId, text)
+        bufferChunk(modelId, requestId, text);
       },
       skip_prompt: true,
       token_callback_function: (tokens) => {
-        generatedTokenCount += tokens.length
+        generatedTokenCount += tokens.length;
       },
-    })
+    });
 
     await activeGenerator(messages, {
       ...generationOptions,
       stopping_criteria: stoppingCriteria,
       streamer,
     } as Parameters<Generator>[1] & {
-      stopping_criteria: StoppingCriteriaList
-    })
+      stopping_criteria: StoppingCriteriaList;
+    });
 
-    flushBufferedText()
+    flushBufferedText();
     performance.measure(
       `worker-generation:${requestId}`,
-      `worker-generation-start:${requestId}`
-    )
+      `worker-generation-start:${requestId}`,
+    );
 
     postMessage({
       type: "complete",
@@ -333,22 +336,22 @@ async function runGeneration(
         : generatedTokenCount >= generationOptions.max_new_tokens
           ? "length"
           : "completed",
-    })
+    });
   } catch (error) {
-    flushBufferedText()
+    flushBufferedText();
     postMessage({
       type: "error",
       modelId,
       error: getErrorMessage(error),
       requestId,
-    })
+    });
   } finally {
-    clearFlushTimeout()
-    bufferedText = ""
-    bufferedModelId = null
-    bufferedRequestId = null
-    activeRequestId = null
-    interruptable.reset()
+    clearFlushTimeout();
+    bufferedText = "";
+    bufferedModelId = null;
+    bufferedRequestId = null;
+    activeRequestId = null;
+    interruptable.reset();
   }
 }
 
@@ -356,12 +359,12 @@ self.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
   postMessage({
     type: "error",
     error: getErrorMessage(event.reason),
-  })
-  event.preventDefault()
-})
+  });
+  event.preventDefault();
+});
 
 self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
-  const payload = event.data
+  const payload = event.data;
 
   switch (payload.type) {
     case "init": {
@@ -370,9 +373,9 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
           type: "error",
           modelId: payload.modelId,
           error: getErrorMessage(error),
-        })
-      })
-      return
+        });
+      });
+      return;
     }
 
     case "generate": {
@@ -380,24 +383,24 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         payload.requestId,
         payload.modelId,
         payload.messages,
-        payload.generationOverrides
-      )
-      return
+        payload.generationOverrides,
+      );
+      return;
     }
 
     case "stop": {
-      interruptable.interrupt()
-      flushBufferedText()
-      return
+      interruptable.interrupt();
+      flushBufferedText();
+      return;
     }
 
     case "reset": {
-      activeRequestId = null
-      clearFlushTimeout()
-      bufferedText = ""
-      bufferedModelId = null
-      bufferedRequestId = null
-      interruptable.reset()
+      activeRequestId = null;
+      clearFlushTimeout();
+      bufferedText = "";
+      bufferedModelId = null;
+      bufferedRequestId = null;
+      interruptable.reset();
     }
   }
-})
+});

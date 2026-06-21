@@ -1,4 +1,3 @@
-import { type ComponentProps, useSyncExternalStore } from "react"
 import {
   ArrowClockwiseIcon,
   CaretDownIcon,
@@ -7,10 +6,11 @@ import {
   DeviceMobileIcon,
   InfoIcon,
   TrashSimpleIcon,
-} from "@phosphor-icons/react"
-import { Link } from "react-router-dom"
+} from "@phosphor-icons/react";
+import { type ComponentProps, useSyncExternalStore } from "react";
+import { Link } from "react-router-dom";
 
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,36 +19,36 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  getProviderGroupDescription,
-  groupChatModelsByProvider,
-} from "@/lib/chat-config"
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
-import type { ChatModelId, ChatModelOption } from "@/lib/chat-types"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/tooltip";
+import {
+  getProviderGroupDescription,
+  groupChatModelsByProvider,
+} from "@/lib/chat-config";
+import type { ChatModelId, ChatModelOption } from "@/lib/chat-types";
+import { cn } from "@/lib/utils";
 
 function useSubmenuSideForViewport(): "bottom" | "right" {
   return useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") {
-        return () => undefined
+        return () => undefined;
       }
-      const mq = window.matchMedia("(max-width: 640px)")
-      mq.addEventListener("change", onStoreChange)
-      return () => mq.removeEventListener("change", onStoreChange)
+      const mq = window.matchMedia("(max-width: 640px)");
+      mq.addEventListener("change", onStoreChange);
+      return () => mq.removeEventListener("change", onStoreChange);
     },
     () =>
       typeof window !== "undefined" &&
       window.matchMedia("(max-width: 640px)").matches
         ? "bottom"
         : "right",
-    () => "right"
-  )
+    () => "right",
+  );
 }
 
 function HeaderAction({
@@ -70,21 +70,21 @@ function HeaderAction({
       />
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
 type ChatHeaderProps = {
-  availableModels: ChatModelOption[]
-  canRetry: boolean
-  messagesCount: number
-  mascotTone: "error" | "idle" | "loading" | "ready" | "typing"
-  modelSelectionDisabled?: boolean
-  onClear: () => void
-  onRetry: () => void
-  onSelectModel: (modelId: ChatModelId) => void
-  selectedModelId: ChatModelId
-  selectedModelLabel: string
-}
+  availableModels: ChatModelOption[];
+  canRetry: boolean;
+  messagesCount: number;
+  mascotTone: "error" | "idle" | "loading" | "ready" | "typing";
+  modelSelectionDisabled?: boolean;
+  onClear: () => void;
+  onRetry: () => void;
+  onSelectModel: (modelId: ChatModelId) => void;
+  selectedModelId: ChatModelId;
+  selectedModelLabel: string;
+};
 
 export function ChatHeader({
   availableModels,
@@ -98,8 +98,8 @@ export function ChatHeader({
   selectedModelId,
   selectedModelLabel,
 }: ChatHeaderProps) {
-  const submenuSide = useSubmenuSideForViewport()
-  const providerGroups = groupChatModelsByProvider(availableModels)
+  const submenuSide = useSubmenuSideForViewport();
+  const providerGroups = groupChatModelsByProvider(availableModels);
 
   return (
     <header className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur-xl">
@@ -136,7 +136,7 @@ export function ChatHeader({
                         "border-border bg-card text-foreground hover:bg-accent",
                       size: "icon-sm",
                       variant: "outline",
-                    })
+                    }),
                   )}
                   to="/about"
                 >
@@ -169,8 +169,8 @@ export function ChatHeader({
             >
               {providerGroups.map(({ providerGroup, models }) => {
                 const selectedInGroup = models.find(
-                  (m) => m.id === selectedModelId
-                )
+                  (m) => m.id === selectedModelId,
+                );
                 return (
                   <DropdownMenuSub key={providerGroup}>
                     <DropdownMenuSubTrigger className="min-h-11 items-start gap-2 py-3.5 text-sm sm:min-h-0 sm:items-center sm:py-3">
@@ -243,7 +243,7 @@ export function ChatHeader({
                       </div>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
-                )
+                );
               })}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -264,5 +264,5 @@ export function ChatHeader({
         </div>
       </div>
     </header>
-  )
+  );
 }

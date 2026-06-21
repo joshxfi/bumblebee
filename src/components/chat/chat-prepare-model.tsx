@@ -1,22 +1,22 @@
-import { CpuIcon, WarningIcon } from "@phosphor-icons/react"
+import { CpuIcon, WarningIcon } from "@phosphor-icons/react";
 
-import { Button } from "@/components/ui/button"
-import { Progress, ProgressLabel } from "@/components/ui/progress"
-import { formatPercent } from "@/lib/chat-config"
-import type { RuntimeStatus } from "@/lib/chat-types"
+import { Button } from "@/components/ui/button";
+import { Progress, ProgressLabel } from "@/components/ui/progress";
+import { formatPercent } from "@/lib/chat-config";
+import type { RuntimeStatus } from "@/lib/chat-types";
 
 type ChatPrepareModelProps = {
-  detail: string
-  deviceProfile: "constrained" | "standard"
-  error: string | null
-  modelLabel: string
-  onCancelModelLoad: () => void
-  onDismissError: () => void
-  onInitModel: () => void
-  progress: number | null
-  progressMeta: string | null
-  runtimeStatus: RuntimeStatus
-}
+  detail: string;
+  deviceProfile: "constrained" | "standard";
+  error: string | null;
+  modelLabel: string;
+  onCancelModelLoad: () => void;
+  onDismissError: () => void;
+  onInitModel: () => void;
+  progress: number | null;
+  progressMeta: string | null;
+  runtimeStatus: RuntimeStatus;
+};
 
 export function ChatPrepareModel({
   detail,
@@ -30,7 +30,7 @@ export function ChatPrepareModel({
   progressMeta,
   runtimeStatus,
 }: ChatPrepareModelProps) {
-  const formattedProgress = formatPercent(progress)
+  const formattedProgress = formatPercent(progress);
 
   if (error) {
     return (
@@ -53,7 +53,7 @@ export function ChatPrepareModel({
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   if (runtimeStatus === "loading-model") {
@@ -79,10 +79,12 @@ export function ChatPrepareModel({
           </Progress>
         </div>
         {progressMeta ? (
-          <div className="mt-2 text-xs text-muted-foreground">{progressMeta}</div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            {progressMeta}
+          </div>
         ) : null}
       </div>
-    )
+    );
   }
 
   return (
@@ -103,5 +105,5 @@ export function ChatPrepareModel({
         Load model
       </Button>
     </div>
-  )
+  );
 }
