@@ -360,6 +360,29 @@ const bonsaiModel: ChatModelConfig = {
   supportsMobile: false,
 };
 
+const desktopFlagshipModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "Largest LFM2 option for the richest local answers; best on a capable desktop.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 256,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.66,
+    top_p: 0.9,
+  },
+  historyTurns: 10,
+  id: "lfm2-2.6b",
+  maxPromptChars: 11000,
+  label: "LFM2 2.6B",
+  modelId: "onnx-community/LFM2-2.6B-ONNX",
+  shortLabel: "2.6B",
+  supportsDesktop: true,
+  supportsMobile: false,
+};
+
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "smollm2-135m": mobileModel,
   "smollm2-360m": smallQualityModel,
@@ -376,6 +399,7 @@ export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "lfm2-1.2b": desktopExperimentalModel,
   "tinyswallow-1.5b-instruct": tinySwallowModel,
   "bonsai-1.7b": bonsaiModel,
+  "lfm2-2.6b": desktopFlagshipModel,
 };
 
 export const DEFAULT_MODEL_ID: ChatModelId = "lfm2-5-350m";
@@ -437,6 +461,7 @@ export function getModelProviderGroup(id: ChatModelId): string {
     case "gemma-3-270m-it":
       return "Gemma";
     case "lfm2-1.2b":
+    case "lfm2-2.6b":
     case "lfm2-350m":
     case "lfm2-5-350m":
     case "lfm2-700m":

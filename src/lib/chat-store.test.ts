@@ -329,6 +329,7 @@ describe("chat store", () => {
       "lfm2-1.2b",
       "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
+      "lfm2-2.6b",
     ]);
     expect(
       store
@@ -342,6 +343,7 @@ describe("chat store", () => {
       "lfm2-1.2b",
       "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
+      "lfm2-2.6b",
     ] as const) {
       expect(
         store.getState().availableModels.find((model) => model.id === modelId)
@@ -377,6 +379,7 @@ describe("chat store", () => {
       "LFM2 1.2B",
       "TinySwallow 1.5B",
       "Bonsai 1.7B",
+      "LFM2 2.6B",
     ]);
   });
 

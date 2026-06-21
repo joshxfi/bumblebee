@@ -8,6 +8,7 @@ export type ChatModelId =
   | "gemma-3-1b-it"
   | "gemma-3-270m-it"
   | "lfm2-1.2b"
+  | "lfm2-2.6b"
   | "lfm2-350m"
   | "lfm2-5-350m"
   | "lfm2-700m"
