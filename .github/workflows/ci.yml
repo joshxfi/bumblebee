@@ -19,6 +19,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Vite 8, @vitejs/plugin-react 6 and Vitest 5 require Node >= 22.12;
+      # `bun run test` executes the Vitest CLI under Node.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
