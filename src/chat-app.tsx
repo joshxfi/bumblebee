@@ -17,7 +17,7 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatMessageBubble } from "@/components/chat/chat-message-bubble";
 import { ChatPerfOverlay } from "@/components/chat/chat-perf-overlay";
 import { ChatPrepareModel } from "@/components/chat/chat-prepare-model";
-import { copyToClipboard } from "@/components/chat/chat-ui";
+import { copyToClipboard, isSubmitEnter } from "@/components/chat/chat-ui";
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -464,7 +464,7 @@ export function ChatApp() {
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.shiftKey) {
+                  if (!isSubmitEnter(event.nativeEvent)) {
                     return;
                   }
 
