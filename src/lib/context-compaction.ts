@@ -44,14 +44,20 @@ function estimateCharsForPayload(messages: ModelMessage[]): number {
   return messages.reduce((total, message) => total + message.content.length, 0);
 }
 
-function stripLeadingAssistants(messages: ChatMessage[]): ChatMessage[] {
+function splitLeadingAssistants(messages: ChatMessage[]): {
+  rest: ChatMessage[];
+  stripped: ChatMessage[];
+} {
   let startIndex = 0;
 
   while (messages[startIndex]?.role === "assistant") {
     startIndex += 1;
   }
 
-  return messages.slice(startIndex);
+  return {
+    rest: messages.slice(startIndex),
+    stripped: messages.slice(0, startIndex),
+  };
 }
 
 /**
@@ -73,8 +79,9 @@ export function trimToCharBudget(
         }
       : null;
 
-  let working = stripLeadingAssistants(trimmed);
-  const droppedFromBudget: ChatMessage[] = [];
+  const initial = splitLeadingAssistants(trimmed);
+  let working = initial.rest;
+  const droppedFromBudget: ChatMessage[] = [...initial.stripped];
 
   const fits = (slice: ChatMessage[]) => {
     const body: ModelMessage[] = slice.map(({ role, content }) => ({
@@ -95,10 +102,27 @@ export function trimToCharBudget(
       break;
     }
     droppedFromBudget.push(dropped);
-    working = stripLeadingAssistants(working.slice(1));
+    const next = splitLeadingAssistants(working.slice(1));
+    droppedFromBudget.push(...next.stripped);
+    working = next.rest;
   }
 
   return { budgetTrimmed: working, droppedFromBudget };
+}
+
+/** Upper bound for the rolling summary kept between turns. */
+export const ROLLING_SUMMARY_MAX_CHARS = 1200;
+
+/**
+ * Stand-in for the summary the compaction pass is about to write, at its
+ * worst-case clamped length (clampCompactionSummary may append "…"). Sizing
+ * the drop set with it guarantees the final trim never drops a message the
+ * summarizer did not see.
+ */
+function worstCaseSummaryFor(priorRollingSummary: string): string {
+  const prior = priorRollingSummary.trim();
+  const reserved = ROLLING_SUMMARY_MAX_CHARS + 1;
+  return prior.length >= reserved ? prior : "x".repeat(reserved);
 }
 
 export function serializeMessagesForSummary(messages: ChatMessage[]): string {
@@ -138,12 +162,19 @@ export function collectDroppedForSend(
   const afterIds = new Set(afterTurn.map((message) => message.id));
   const dropTurn = beforeTurn.filter((message) => !afterIds.has(message.id));
 
+  const firstPass = mergeDroppedMessages(
+    dropTurn,
+    trimToCharBudget(afterTurn, priorRollingSummary, modelId).droppedFromBudget,
+  );
+  if (firstPass.length === 0) {
+    return firstPass;
+  }
+
   const { droppedFromBudget } = trimToCharBudget(
     afterTurn,
-    priorRollingSummary,
+    worstCaseSummaryFor(priorRollingSummary),
     modelId,
   );
-
   return mergeDroppedMessages(dropTurn, droppedFromBudget);
 }
 
@@ -153,12 +184,20 @@ export function collectDroppedForRetry(
   priorRollingSummary: string,
 ): ChatMessage[] {
   const afterTurn = trimTurnWindow(history, modelId);
-  const { droppedFromBudget } = trimToCharBudget(
+  const firstPass = trimToCharBudget(
     afterTurn,
     priorRollingSummary,
     modelId,
-  );
+  ).droppedFromBudget;
+  if (firstPass.length === 0) {
+    return [];
+  }
 
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    worstCaseSummaryFor(priorRollingSummary),
+    modelId,
+  );
   return mergeDroppedMessages([], droppedFromBudget);
 }
 
@@ -169,13 +208,22 @@ export function collectDroppedForContinue(
   continueTail: ModelMessage[],
 ): ChatMessage[] {
   const afterTurn = trimTurnWindow(messages, modelId);
-  const { droppedFromBudget } = trimToCharBudget(
+  const firstPass = trimToCharBudget(
     afterTurn,
     priorRollingSummary,
     modelId,
     continueTail,
-  );
+  ).droppedFromBudget;
+  if (firstPass.length === 0) {
+    return [];
+  }
 
+  const { droppedFromBudget } = trimToCharBudget(
+    afterTurn,
+    worstCaseSummaryFor(priorRollingSummary),
+    modelId,
+    continueTail,
+  );
   return mergeDroppedMessages([], droppedFromBudget);
 }
 
@@ -217,7 +265,10 @@ Write an updated bullet summary merging prior facts with the new material. Focus
   return [{ role: "user", content: instruction }];
 }
 
-export function clampCompactionSummary(text: string, maxChars = 1200) {
+export function clampCompactionSummary(
+  text: string,
+  maxChars = ROLLING_SUMMARY_MAX_CHARS,
+) {
   const trimmed = text.trim();
   if (trimmed.length <= maxChars) {
     return trimmed;
