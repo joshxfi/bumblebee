@@ -652,4 +652,35 @@ describe("chat store", () => {
       state.messages.some((message) => message.state === "streaming"),
     ).toBe(false);
   });
+
+  it("stops the worker and ignores stale tokens after clearing mid-reply", () => {
+    const runtime = createRuntimeStub();
+    const store = createChatStore(runtime);
+    store.setState({ hasLoadedModel: true, runtimeStatus: "ready" });
+
+    store.getState().sendMessage("Hello");
+    const requestId = requireRequestId(store.getState().activeRequestId);
+    const modelId = store.getState().selectedModelId;
+
+    store.getState().clearChat();
+
+    // Tokens/complete the worker posted before it processed the reset.
+    applyWorkerEvent(store, {
+      type: "token",
+      modelId,
+      requestId,
+      text: "stale",
+    });
+    applyWorkerEvent(store, {
+      type: "complete",
+      finishReason: "stopped",
+      generatedTokens: 1,
+      modelId,
+      requestId,
+    });
+
+    expect(runtime.stop).toHaveBeenCalled();
+    expect(store.getState().messages).toHaveLength(0);
+    expect(store.getState().runtimeStatus).toBe("ready");
+  });
 });

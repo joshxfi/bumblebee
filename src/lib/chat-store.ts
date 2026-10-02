@@ -496,6 +496,10 @@ export function createChatStore(
     ...initialState,
     clearChat: () => {
       invalidateGeneration();
+      if (get().activeRequestId !== null) {
+        // reset alone only drops output; stop actually halts the model.
+        runtime.stop();
+      }
       runtime.reset();
 
       set((state) => ({
@@ -951,8 +955,8 @@ export function applyWorkerEvent(
       store.setState((state) => {
         if (
           !eventTargetsSelectedModel(state, event) ||
-          (state.activeRequestId !== null &&
-            state.activeRequestId !== event.requestId)
+          state.activeRequestId === null ||
+          state.activeRequestId !== event.requestId
         ) {
           return state;
         }
@@ -974,8 +978,8 @@ export function applyWorkerEvent(
       store.setState((state) => {
         if (
           !eventTargetsSelectedModel(state, event) ||
-          (state.activeRequestId !== null &&
-            state.activeRequestId !== event.requestId)
+          state.activeRequestId === null ||
+          state.activeRequestId !== event.requestId
         ) {
           return state;
         }
