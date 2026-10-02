@@ -860,7 +860,31 @@ export function createChatStore(
       });
     },
     stopGeneration: () => {
-      if (get().runtimeStatus !== "generating") {
+      const state = get();
+      if (state.runtimeStatus !== "generating") {
+        return;
+      }
+
+      if (state.isCompactingContext) {
+        // The main reply has not been requested yet: abandon the pipeline so
+        // the interrupted summary can neither replace the rolling summary nor
+        // start a generation the user just tried to stop.
+        invalidateGeneration();
+        runtime.stop();
+        set({
+          activeAssistantId: null,
+          activeRequestId: null,
+          isCompactingContext: false,
+          messages: finalizeAssistantMessage(
+            state.messages,
+            state.activeAssistantId,
+            "done",
+            "stopped",
+            true,
+          ),
+          pendingStop: false,
+          runtimeStatus: state.hasLoadedModel ? "ready" : "idle",
+        });
         return;
       }
 
