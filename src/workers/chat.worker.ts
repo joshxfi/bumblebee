@@ -51,6 +51,9 @@ let bufferedText = "";
 let bufferedModelId: ChatModelId | null = null;
 let bufferedRequestId: string | null = null;
 let flushTimeoutId: number | null = null;
+// Generations run one at a time: a new request waits until the previous run
+// (including its cleanup) finishes, so two runs never share mutable state.
+let generationQueue: Promise<void> = Promise.resolve();
 const interruptable = new InterruptableStoppingCriteria();
 
 function postMessage(event: WorkerEvent) {
@@ -175,12 +178,12 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
     return loadPromise;
   }
 
-  const candidates = await getDeviceCandidates();
   const model = getModelConfig(modelId);
   performance.mark(`worker-model-load-start:${modelId}`);
 
   loadingModelId = modelId;
   loadPromise = (async () => {
+    const candidates = await getDeviceCandidates();
     let lastError: unknown = null;
 
     for (const candidate of candidates) {
@@ -350,7 +353,9 @@ async function runGeneration(
     bufferedText = "";
     bufferedModelId = null;
     bufferedRequestId = null;
-    activeRequestId = null;
+    if (activeRequestId === requestId) {
+      activeRequestId = null;
+    }
     interruptable.reset();
   }
 }
@@ -379,11 +384,14 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
     }
 
     case "generate": {
-      void runGeneration(
-        payload.requestId,
-        payload.modelId,
-        payload.messages,
-        payload.generationOverrides,
+      // runGeneration reports its own failures, so the queue never rejects.
+      generationQueue = generationQueue.then(() =>
+        runGeneration(
+          payload.requestId,
+          payload.modelId,
+          payload.messages,
+          payload.generationOverrides,
+        ),
       );
       return;
     }
@@ -395,12 +403,14 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
     }
 
     case "reset": {
+      // Abandon the running generation: stop it at the next token and drop
+      // anything it still emits. The next queued run resets the criteria.
+      interruptable.interrupt();
       activeRequestId = null;
       clearFlushTimeout();
       bufferedText = "";
       bufferedModelId = null;
       bufferedRequestId = null;
-      interruptable.reset();
     }
   }
 });

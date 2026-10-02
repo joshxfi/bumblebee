@@ -17,7 +17,7 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatMessageBubble } from "@/components/chat/chat-message-bubble";
 import { ChatPerfOverlay } from "@/components/chat/chat-perf-overlay";
 import { ChatPrepareModel } from "@/components/chat/chat-prepare-model";
-import { copyToClipboard } from "@/components/chat/chat-ui";
+import { copyToClipboard, isSubmitEnter } from "@/components/chat/chat-ui";
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -71,6 +71,7 @@ export function ChatApp() {
   const previousMessageCountRef = useRef(0);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const previousLastMessageLengthRef = useRef(0);
+  const previousLastMessageStateRef = useRef<ChatMessage["state"] | null>(null);
   const [copiedMessageState, setCopiedMessageState] = useState<{
     messageId: string;
     status: "copied" | "error";
@@ -149,6 +150,7 @@ export function ChatApp() {
       return 156;
     },
     gap: 12,
+    getItemKey: (index) => messages[index]?.id ?? "__compaction_strip",
     getScrollElement: () => scrollViewportRef.current,
     overscan: 6,
     paddingEnd: 40,
@@ -192,7 +194,13 @@ export function ChatApp() {
       });
     };
 
-    updateScrollState();
+    // Only user scrolling may unpin the view; re-measuring here would see the
+    // freshly added bubbles before auto-scroll runs and wrongly unpin.
+    if (messages.length === 0) {
+      isNearBottomRef.current = true;
+      setIsNearBottom(true);
+      setShowScrollToBottom(false);
+    }
     viewport.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
@@ -202,15 +210,6 @@ export function ChatApp() {
       viewport.removeEventListener("scroll", onScroll);
     };
   }, [messages.length]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: remeasure on compaction strip, new rows, or streaming edits (same length).
-  useEffect(() => {
-    if (!shouldVirtualize) {
-      return;
-    }
-
-    rowVirtualizer.measure();
-  }, [isCompactingContext, messages, rowVirtualizer, shouldVirtualize]);
 
   useEffect(() => {
     const viewport = scrollViewportRef.current;
@@ -226,29 +225,28 @@ export function ChatApp() {
     const lastMessageLength = lastMessage?.content.length ?? 0;
     const isStreamingUpdate =
       previousLastMessageLengthRef.current !== lastMessageLength;
+    // A finished reply re-renders as Markdown, changing height without
+    // changing length.
+    const isStateChange =
+      previousLastMessageStateRef.current !== (lastMessage?.state ?? null);
 
     const rafId = window.requestAnimationFrame(() => {
       if (
         isNearBottomRef.current &&
-        (isNewMessage || isStreamingUpdate || isCompactingContext)
+        (isNewMessage ||
+          isStreamingUpdate ||
+          isStateChange ||
+          isCompactingContext)
       ) {
-        viewport.scrollTo({
-          top: viewport.scrollHeight,
-          behavior: isNewMessage ? "smooth" : "auto",
-        });
+        // Instant: a smooth scroll's intermediate scroll events would read as
+        // "user scrolled away" and unpin the view.
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
       }
-
-      const distanceFromBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const nextIsNearBottom = distanceFromBottom < NEAR_BOTTOM_PX;
-
-      isNearBottomRef.current = nextIsNearBottom;
-      setIsNearBottom(nextIsNearBottom);
-      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom);
 
       previousMessageCountRef.current = messages.length;
       previousLastMessageIdRef.current = lastMessage?.id ?? null;
       previousLastMessageLengthRef.current = lastMessageLength;
+      previousLastMessageStateRef.current = lastMessage?.state ?? null;
     });
 
     return () => {
@@ -466,7 +464,7 @@ export function ChatApp() {
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.shiftKey) {
+                  if (!isSubmitEnter(event.nativeEvent)) {
                     return;
                   }
 
