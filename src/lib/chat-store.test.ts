@@ -588,4 +588,68 @@ describe("chat store", () => {
     expect(store.getState().messages).toHaveLength(0);
     expect(store.getState().isCompactingContext).toBe(false);
   });
+
+  it("cancels the turn when stop is pressed during context compaction", async () => {
+    const runtime = createRuntimeStub({ autoCompleteCompaction: false });
+    const store = createChatStore(runtime);
+
+    store.setState({
+      hasLoadedModel: true,
+      messages: Array.from({ length: 18 }, (_, index) => ({
+        content:
+          index % 2 === 0
+            ? `User turn ${index / 2 + 1}`
+            : `Assistant turn ${Math.ceil(index / 2)}`,
+        createdAt: index,
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        state: "done",
+      })),
+      rollingContextSummary: "- earlier facts",
+      runtimeStatus: "ready",
+    });
+
+    store.getState().sendMessage("Newest turn");
+    await flushMicrotasks();
+
+    expect(store.getState().isCompactingContext).toBe(true);
+    expect(store.getState().runtimeStatus).toBe("generating");
+    const compactionRequestId = String(
+      vi.mocked(runtime.generate).mock.calls[0]?.[0],
+    );
+    expect(compactionRequestId.startsWith("compact-")).toBe(true);
+
+    store.getState().stopGeneration();
+
+    // The worker answers the interrupted summary run with partial text.
+    for (const listener of [...runtime.listeners]) {
+      listener({
+        type: "token",
+        modelId: "lfm2-5-350m",
+        requestId: compactionRequestId,
+        text: "- partial",
+      });
+      listener({
+        type: "complete",
+        finishReason: "stopped",
+        generatedTokens: 2,
+        modelId: "lfm2-5-350m",
+        requestId: compactionRequestId,
+      });
+    }
+    await flushMicrotasks();
+
+    const state = store.getState();
+    expect(runtime.stop).toHaveBeenCalled();
+    expect(runtime.generate).toHaveBeenCalledTimes(1);
+    expect(state.rollingContextSummary).toBe("- earlier facts");
+    expect(state.isCompactingContext).toBe(false);
+    expect(state.runtimeStatus).toBe("ready");
+    expect(state.activeRequestId).toBeNull();
+    expect(state.activeAssistantId).toBeNull();
+    expect(state.messages.at(-1)?.content).toBe("Newest turn");
+    expect(
+      state.messages.some((message) => message.state === "streaming"),
+    ).toBe(false);
+  });
 });
