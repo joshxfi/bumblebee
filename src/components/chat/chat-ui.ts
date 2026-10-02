@@ -48,3 +48,18 @@ export function formatTimestamp(value: number) {
     minute: "2-digit",
   }).format(value);
 }
+
+/** True when Enter should submit the composer (not Shift+Enter, not IME confirm). */
+export function isSubmitEnter(event: {
+  isComposing: boolean;
+  key: string;
+  keyCode: number;
+  shiftKey: boolean;
+}) {
+  if (event.key !== "Enter" || event.shiftKey) {
+    return false;
+  }
+
+  // Safari reports the IME-confirming Enter as keyCode 229 with isComposing false.
+  return !event.isComposing && event.keyCode !== 229;
+}
