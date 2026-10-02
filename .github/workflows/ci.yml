@@ -27,20 +27,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Blocks on high/critical advisories. The ignores are Node-only transitive
-      # deps of @huggingface/transformers (onnxruntime-node -> adm-zip, sharp);
-      # vite.config.ts aliases the package to its web build, so they never ship
-      # to the browser. Drop each ignore once transformers bumps the dependency.
+      # Blocks on high/critical advisories.
       - name: Audit dependencies
-        run: >-
-          bun audit --audit-level=high
-          --ignore=GHSA-xcpc-8h2w-3j85
-          --ignore=GHSA-7q85-xj36-vmfc
-          --ignore=GHSA-rcw4-f5rp-g42v
-          --ignore=GHSA-j5f4-cc29-5x44
-          --ignore=GHSA-8238-w5pm-2374
-          --ignore=GHSA-f88m-g3jw-g9cj
-          --ignore=GHSA-rgj7-g3m4-5g8c
+        run: bun audit --audit-level=high
 
       - name: Typecheck
         run: bun run typecheck
