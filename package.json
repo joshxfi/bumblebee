@@ -42,7 +42,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.5.15",
     "@rolldown/plugin-babel": "^0.2.4",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.19.1",
