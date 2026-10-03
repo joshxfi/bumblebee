@@ -34,9 +34,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Blocks on high/critical advisories.
+      # Blocks on high/critical advisories. The ignore is braces (no patched
+      # release yet), reached only through the shadcn CLI devDependency
+      # (fast-glob -> micromatch); it never ships to the browser. Drop it once
+      # braces publishes a fix.
       - name: Audit dependencies
-        run: bun audit --audit-level=high
+        run: >-
+          bun audit --audit-level=high
+          --ignore=GHSA-vfj7-8cjw-p6xm
 
       - name: Typecheck
         run: bun run typecheck
