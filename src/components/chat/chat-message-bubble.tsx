@@ -4,9 +4,17 @@ import {
   CopySimpleIcon,
 } from "@phosphor-icons/react";
 
+import { ChatReasoning } from "@/components/chat/chat-reasoning";
 import { formatTimestamp } from "@/components/chat/chat-ui";
 import { MarkdownMessage } from "@/components/markdown-message";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import {
+  Message,
+  MessageContent,
+  MessageFooter,
+} from "@/components/ui/message";
 import type { ChatMessage } from "@/lib/chat-types";
 
 type ChatMessageBubbleProps = {
@@ -25,73 +33,70 @@ export function ChatMessageBubble({
   onCopy,
 }: ChatMessageBubbleProps) {
   const assistant = message.role === "assistant";
+  const streaming = message.state === "streaming";
+  const hasAnswer = message.content.trim().length > 0;
+  const reasoning = assistant ? (message.reasoning?.trim() ?? "") : "";
+  const isReasoning = streaming && reasoning.length > 0 && !hasAnswer;
   const showPendingPlaceholder =
-    assistant &&
-    message.state === "streaming" &&
-    message.content.trim().length === 0;
-  const fallbackContent =
-    message.content ||
-    (message.state === "error"
-      ? "Response failed before any text arrived."
-      : "");
-  const canCopy = assistant && message.content.trim().length > 0;
+    assistant && streaming && !hasAnswer && reasoning.length === 0;
+  const failedBeforeText = message.state === "error" && !hasAnswer;
+  const bodyText = failedBeforeText
+    ? "Response failed before any text arrived."
+    : message.content;
+  const canCopy = assistant && hasAnswer;
   const hitLengthLimit = assistant && message.finishReason === "length";
-  const renderPlainStreaming =
-    assistant &&
-    message.state === "streaming" &&
-    message.content.trim().length > 0;
 
   return (
-    <article
-      className={`flex flex-col gap-1 ${
-        assistant ? "items-start" : "items-end"
-      }`}
+    <Message
+      align={assistant ? "start" : "end"}
+      aria-busy={assistant ? streaming : undefined}
     >
-      <div className="flex max-w-[88%] flex-col gap-1 sm:max-w-[72%]">
-        <div
-          aria-busy={assistant ? message.state === "streaming" : undefined}
-          aria-live={assistant ? "polite" : undefined}
-          className={`border px-4 py-3 text-sm/6 shadow-[0_6px_18px_rgba(0,0,0,0.16)] ${
-            assistant
-              ? "border-border bg-card text-foreground"
-              : "border-primary bg-primary text-primary-foreground"
-          }`}
-        >
-          {showPendingPlaceholder ? (
-            <div className="bumblebee-waiting">
-              <span aria-hidden="true" className="bumblebee-waiting__bee">
-                🐝
-              </span>
-              <span className="bumblebee-waiting__label">
-                Bumblebee is thinking
-              </span>
-              <span aria-hidden="true" className="bumblebee-waiting__dots">
-                <span />
-                <span />
-                <span />
-              </span>
-            </div>
-          ) : renderPlainStreaming ? (
-            <div className="whitespace-pre-wrap break-words text-sm/6 text-foreground">
-              {fallbackContent}
-            </div>
-          ) : (
-            <MarkdownMessage
-              className={`bumblebee-markdown ${
-                assistant
-                  ? "text-foreground"
-                  : "text-primary-foreground [--link-color:var(--primary-foreground)]"
-              }`}
-              content={fallbackContent}
-              streaming={message.state === "streaming"}
-            />
-          )}
-        </div>
-        <div
-          className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-muted-foreground ${
-            assistant ? "justify-between" : "justify-end"
-          }`}
-        >
+      <MessageContent className="gap-1.5">
+        {reasoning ? (
+          <ChatReasoning
+            durationMs={message.reasoningDurationMs}
+            interrupted={!streaming && !hasAnswer}
+            reasoning={reasoning}
+            streaming={isReasoning}
+          />
+        ) : null}
+
+        {showPendingPlaceholder ? (
+          <Marker role="status">
+            <MarkerIcon className="animate-[bee-bob_0.95s_ease-in-out_infinite] text-sm motion-reduce:animate-none">
+              🐝
+            </MarkerIcon>
+            <MarkerContent className="shimmer">
+              Bumblebee is thinking…
+            </MarkerContent>
+          </Marker>
+        ) : bodyText ? (
+          <Bubble
+            align={assistant ? "start" : "end"}
+            variant={
+              failedBeforeText ? "destructive" : assistant ? "ghost" : "default"
+            }
+          >
+            <BubbleContent className="text-sm/6">
+              {assistant && streaming ? (
+                <div className="whitespace-pre-wrap break-words text-foreground">
+                  {bodyText}
+                </div>
+              ) : (
+                <MarkdownMessage
+                  className={`bumblebee-markdown ${
+                    assistant
+                      ? "text-foreground"
+                      : "text-primary-foreground [--link-color:var(--primary-foreground)]"
+                  }`}
+                  content={bodyText}
+                />
+              )}
+            </BubbleContent>
+          </Bubble>
+        ) : null}
+
+        <MessageFooter className="flex-wrap justify-between gap-x-2 gap-y-1 px-0 text-[11px] font-normal">
           <span>
             {assistant ? "Bumblebee" : "You"} ·{" "}
             {formatTimestamp(message.createdAt)}
@@ -134,8 +139,8 @@ export function ChatMessageBubble({
               ) : null}
             </div>
           ) : null}
-        </div>
-      </div>
-    </article>
+        </MessageFooter>
+      </MessageContent>
+    </Message>
   );
 }

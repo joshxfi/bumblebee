@@ -36,7 +36,7 @@ Bumblebee picks the starting model from [`getRecommendedModelId`](src/lib/chat-c
 
 ## Model catalog
 
-All checkpoints below are **q4** ONNX builds from the [`onnx-community`](https://huggingface.co/onnx-community) org. **Desktop only** means `supportsMobile: false` in config—those entries are disabled when the device profile is constrained.
+All checkpoints below are **q4** ONNX builds from the [`onnx-community`](https://huggingface.co/onnx-community) org, except the LFM2.5 230M / 1.2B / 1.2B Thinking / 2.6B builds, which come from [`LiquidAI`](https://huggingface.co/LiquidAI). **Desktop only** means `supportsMobile: false` in config—those entries are disabled when the device profile is constrained.
 
 ### SmolLM
 
@@ -51,7 +51,8 @@ All checkpoints below are **q4** ONNX builds from the [`onnx-community`](https:/
 ### Qwen
 
 - **Qwen2.5 0.5B** — `onnx-community/Qwen2.5-0.5B-Instruct-ONNX-MHA` — mobile + desktop
-- **Qwen3 0.6B** — `onnx-community/Qwen3-0.6B-ONNX` — mobile + desktop
+- **Qwen3 0.6B** — `onnx-community/Qwen3-0.6B-ONNX` — mobile + desktop, reasoning
+- **Qwen3.5 0.8B** — `onnx-community/Qwen3.5-0.8B-Text-ONNX` — mobile + desktop
 
 ### Falcon
 
@@ -60,11 +61,12 @@ All checkpoints below are **q4** ONNX builds from the [`onnx-community`](https:/
 
 ### LFM (Liquid)
 
+- **LFM2.5 230M** — `LiquidAI/LFM2.5-230M-ONNX` — mobile + desktop
 - **LFM2.5 350M** — `onnx-community/LFM2.5-350M-ONNX` — mobile + desktop
-- **LFM2 350M** — `onnx-community/LFM2-350M-ONNX` — mobile + desktop
 - **LFM2 700M** — `onnx-community/LFM2-700M-ONNX` — desktop only
-- **LFM2 1.2B** — `onnx-community/LFM2-1.2B-ONNX` — desktop only
-- **LFM2 2.6B** — `onnx-community/LFM2-2.6B-ONNX` — desktop only
+- **LFM2.5 1.2B** — `LiquidAI/LFM2.5-1.2B-Instruct-ONNX` — desktop only
+- **LFM2.5 1.2B Thinking** — `LiquidAI/LFM2.5-1.2B-Thinking-ONNX` — desktop only, reasoning
+- **LFM2.5 2.6B** — `LiquidAI/LFM2.5-2.6B-ONNX` — desktop only, reasoning
 
 ### Llama
 

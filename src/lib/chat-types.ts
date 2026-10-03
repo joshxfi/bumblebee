@@ -9,14 +9,16 @@ export type ChatModelId =
   | "gemma-3-270m-it"
   | "granite-4.0-1b"
   | "granite-4.0-350m"
-  | "lfm2-1.2b"
-  | "lfm2-2.6b"
-  | "lfm2-350m"
+  | "lfm2-5-1.2b"
+  | "lfm2-5-1.2b-thinking"
+  | "lfm2-5-2.6b"
+  | "lfm2-5-230m"
   | "lfm2-5-350m"
   | "lfm2-700m"
   | "llama-3.2-1b-instruct"
   | "qwen2.5-0.5b"
   | "qwen3-0.6b"
+  | "qwen3.5-0.8b"
   | "smollm2-135m"
   | "smollm2-360m"
   | "tinyswallow-1.5b-instruct";
@@ -29,6 +31,8 @@ export type RuntimeStatus =
   | "generating"
   | "error";
 export type ChatDevice = "webgpu" | "wasm";
+/** Which part of an assistant turn a streamed chunk belongs to. */
+export type StreamChannel = "content" | "reasoning";
 
 export type ChatGenerationConfig = {
   do_sample: boolean;
@@ -36,6 +40,7 @@ export type ChatGenerationConfig = {
   repetition_penalty: number;
   return_full_text: false;
   temperature: number;
+  top_k?: number;
   top_p: number;
 };
 
@@ -71,9 +76,15 @@ export type ChatModelOption = {
 export type ChatMessage = {
   id: string;
   role: ChatRole;
+  /** Answer text only; reasoning lives in `reasoning` and never reaches model history. */
   content: string;
   createdAt: number;
   finishReason?: FinishReason;
+  /** Think-block text streamed before the answer by reasoning models. */
+  reasoning?: string;
+  /** Time from the first reasoning chunk to the first answer chunk (or the end of the turn). */
+  reasoningDurationMs?: number;
+  reasoningStartedAt?: number;
   state: ChatMessageState;
 };
 
@@ -127,7 +138,13 @@ export type WorkerEvent =
       device: ChatDevice;
       dtype: string;
     }
-  | { type: "token"; modelId: ChatModelId; requestId: string; text: string }
+  | {
+      type: "token";
+      channel: StreamChannel;
+      modelId: ChatModelId;
+      requestId: string;
+      text: string;
+    }
   | {
       type: "complete";
       generatedTokens: number;

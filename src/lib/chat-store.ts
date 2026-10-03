@@ -18,6 +18,7 @@ import type {
   ModelLoadProgress,
   ModelMessage,
   RuntimeStatus,
+  StreamChannel,
   WorkerEvent,
 } from "@/lib/chat-types";
 import {
@@ -114,9 +115,56 @@ function createInitialLoadProgress(modelId: ChatModelId): ModelLoadProgress {
   };
 }
 
+function withAssistantChunk(
+  message: ChatMessage,
+  channel: StreamChannel,
+  chunk: string,
+): ChatMessage {
+  const timestamp = Date.now();
+
+  if (channel === "reasoning") {
+    return {
+      ...message,
+      reasoning: `${message.reasoning ?? ""}${chunk}`,
+      reasoningDurationMs: undefined,
+      // On "Continue", resume the clock so the label covers total think time.
+      reasoningStartedAt:
+        message.reasoningDurationMs !== undefined
+          ? timestamp - message.reasoningDurationMs
+          : (message.reasoningStartedAt ?? timestamp),
+      state: "streaming",
+    };
+  }
+
+  return {
+    ...withSettledReasoning(message, timestamp),
+    content: `${message.content}${chunk}`,
+    state: "streaming",
+  };
+}
+
+/** Stamps how long the model thought once its reasoning phase has ended. */
+function withSettledReasoning(
+  message: ChatMessage,
+  timestamp: number,
+): ChatMessage {
+  if (
+    message.reasoningStartedAt === undefined ||
+    message.reasoningDurationMs !== undefined
+  ) {
+    return message;
+  }
+
+  return {
+    ...message,
+    reasoningDurationMs: timestamp - message.reasoningStartedAt,
+  };
+}
+
 function appendAssistantChunk(
   messages: ChatMessage[],
   activeAssistantId: string | null,
+  channel: StreamChannel,
   chunk: string,
 ): ChatMessage[] {
   if (!chunk) {
@@ -124,28 +172,27 @@ function appendAssistantChunk(
   }
 
   if (!activeAssistantId) {
-    return [...messages, createChatMessage("assistant", chunk, "streaming")];
+    return [
+      ...messages,
+      withAssistantChunk(
+        createChatMessage("assistant", "", "streaming"),
+        channel,
+        chunk,
+      ),
+    ];
   }
 
   const lastMessage = messages.at(-1);
   if (lastMessage?.id === activeAssistantId) {
     return [
       ...messages.slice(0, -1),
-      {
-        ...lastMessage,
-        content: `${lastMessage.content}${chunk}`,
-        state: "streaming",
-      },
+      withAssistantChunk(lastMessage, channel, chunk),
     ];
   }
 
   return messages.map((message) =>
     message.id === activeAssistantId
-      ? {
-          ...message,
-          content: `${message.content}${chunk}`,
-          state: "streaming",
-        }
+      ? withAssistantChunk(message, channel, chunk)
       : message,
   );
 }
@@ -166,11 +213,23 @@ function finalizeAssistantMessage(
       return [message];
     }
 
-    if (dropIfEmpty && message.content.trim().length === 0) {
+    // A turn stopped mid-thought keeps its reasoning visible; answer-less
+    // assistant turns are already excluded from model history.
+    if (
+      dropIfEmpty &&
+      message.content.trim().length === 0 &&
+      !message.reasoning?.trim()
+    ) {
       return [];
     }
 
-    return [{ ...message, finishReason, state: nextState }];
+    return [
+      {
+        ...withSettledReasoning(message, Date.now()),
+        finishReason,
+        state: nextState,
+      },
+    ];
   });
 }
 
@@ -266,7 +325,12 @@ async function runRollingSummaryGeneration(
         return;
       }
 
-      if (event.type === "token" && event.requestId === requestId) {
+      // Reasoning models think before summarizing; keep only the answer.
+      if (
+        event.type === "token" &&
+        event.requestId === requestId &&
+        event.channel === "content"
+      ) {
         buffer += event.text;
         return;
       }
@@ -966,6 +1030,7 @@ export function applyWorkerEvent(
           messages: appendAssistantChunk(
             state.messages,
             state.activeAssistantId,
+            event.channel,
             event.text,
           ),
           runtimeStatus: "generating" as const,

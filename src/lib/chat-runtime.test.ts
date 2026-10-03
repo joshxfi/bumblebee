@@ -32,8 +32,8 @@ describe("chat runtime", () => {
 
     const unsubscribe = runtime.subscribe(listener);
 
-    runtime.init("lfm2-350m");
-    runtime.generate("request-1", "lfm2-350m", [
+    runtime.init("lfm2-5-350m");
+    runtime.generate("request-1", "lfm2-5-350m", [
       { role: "user", content: "hello" },
     ]);
     runtime.stop();
@@ -41,16 +41,16 @@ describe("chat runtime", () => {
 
     worker.emitWorkerEvent({
       type: "ready",
-      modelId: "lfm2-350m",
+      modelId: "lfm2-5-350m",
       device: "wasm",
       dtype: "q4",
     });
 
     expect(worker.messages).toEqual([
-      { type: "init", modelId: "lfm2-350m" },
+      { type: "init", modelId: "lfm2-5-350m" },
       {
         type: "generate",
-        modelId: "lfm2-350m",
+        modelId: "lfm2-5-350m",
         requestId: "request-1",
         messages: [{ role: "user", content: "hello" }],
       },
@@ -59,7 +59,7 @@ describe("chat runtime", () => {
     ]);
     expect(listener).toHaveBeenCalledWith({
       type: "ready",
-      modelId: "lfm2-350m",
+      modelId: "lfm2-5-350m",
       device: "wasm",
       dtype: "q4",
     });
@@ -104,7 +104,7 @@ describe("chat runtime", () => {
       createWorker as unknown as () => Worker,
     );
 
-    runtime.init("lfm2-350m");
+    runtime.init("lfm2-5-350m");
     runtime.recreateWorker();
     runtime.init("smollm2-135m");
 
@@ -122,27 +122,28 @@ describe("chat runtime", () => {
     const perfListener = vi.fn();
     const unsubscribePerf = subscribeChatPerf(perfListener);
 
-    runtime.init("lfm2-350m");
+    runtime.init("lfm2-5-350m");
     worker.emitWorkerEvent({
       type: "ready",
-      modelId: "lfm2-350m",
+      modelId: "lfm2-5-350m",
       device: "wasm",
       dtype: "q4",
     });
 
-    runtime.generate("request-1", "lfm2-350m", [
+    runtime.generate("request-1", "lfm2-5-350m", [
       { role: "user", content: "hello" },
     ]);
     worker.emitWorkerEvent({
       type: "token",
-      modelId: "lfm2-350m",
+      channel: "content",
+      modelId: "lfm2-5-350m",
       requestId: "request-1",
       text: "world",
     });
     worker.emitWorkerEvent({
       type: "complete",
       generatedTokens: 5,
-      modelId: "lfm2-350m",
+      modelId: "lfm2-5-350m",
       requestId: "request-1",
       finishReason: "completed",
     });
@@ -153,7 +154,7 @@ describe("chat runtime", () => {
       historyTurnCount: 1,
       kind: "generation",
       messageChars: 5,
-      selectedModelId: "lfm2-350m",
+      selectedModelId: "lfm2-5-350m",
     });
 
     unsubscribePerf();
