@@ -14,9 +14,11 @@ import type {
   ChatModelId,
   ModelLoadProgress,
   ModelMessage,
+  StreamChannel,
   WorkerEvent,
   WorkerRequest,
 } from "@/lib/chat-types";
+import { createReasoningSplitter, promptOpensReasoning } from "@/lib/reasoning";
 
 type Generator = Awaited<ReturnType<typeof pipeline<"text-generation">>>;
 
@@ -48,6 +50,7 @@ let loadingModelId: ChatModelId | null = null;
 let activeRequestId: string | null = null;
 let activeDevice: ChatDevice = "wasm";
 let bufferedText = "";
+let bufferedChannel: StreamChannel = "content";
 let bufferedModelId: ChatModelId | null = null;
 let bufferedRequestId: string | null = null;
 let flushTimeoutId: number | null = null;
@@ -84,6 +87,7 @@ function flushBufferedText() {
 
   postMessage({
     type: "token",
+    channel: bufferedChannel,
     modelId: bufferedModelId,
     requestId: bufferedRequestId,
     text: bufferedText,
@@ -94,11 +98,22 @@ function flushBufferedText() {
   bufferedRequestId = null;
 }
 
-function bufferChunk(modelId: ChatModelId, requestId: string, text: string) {
+function bufferChunk(
+  modelId: ChatModelId,
+  requestId: string,
+  channel: StreamChannel,
+  text: string,
+) {
   if (!text || activeRequestId !== requestId) {
     return;
   }
 
+  // Each token event carries one channel, so flush on a reasoning/answer switch.
+  if (bufferedText && bufferedChannel !== channel) {
+    flushBufferedText();
+  }
+
+  bufferedChannel = channel;
   bufferedText += text;
   bufferedModelId = modelId;
   bufferedRequestId = requestId;
@@ -270,6 +285,25 @@ async function loadGenerator(modelId: ChatModelId): Promise<Generator> {
   return loadPromise;
 }
 
+/**
+ * Some reasoning templates (LFM2.5 2.6B / Thinking) end the prompt inside an
+ * open think block, so the stream starts mid-reasoning with no opening tag.
+ */
+function templateOpensReasoning(
+  activeGenerator: Generator,
+  messages: ModelMessage[],
+): boolean {
+  try {
+    const prompt = activeGenerator.tokenizer.apply_chat_template(messages, {
+      add_generation_prompt: true,
+      tokenize: false,
+    });
+    return typeof prompt === "string" && promptOpensReasoning(prompt);
+  } catch {
+    return false;
+  }
+}
+
 function mergeGenerationOptions(
   base: ReturnType<typeof getModelConfig>["generation"],
   overrides?: ChatGenerationOverrides,
@@ -305,9 +339,20 @@ async function runGeneration(
     stoppingCriteria.push(interruptable);
     let generatedTokenCount = 0;
 
+    const reasoningSplitter = createReasoningSplitter({
+      startInReasoning: templateOpensReasoning(activeGenerator, messages),
+    });
+    const emitSegments = (
+      segments: ReturnType<typeof reasoningSplitter.push>,
+    ) => {
+      for (const segment of segments) {
+        bufferChunk(modelId, requestId, segment.channel, segment.text);
+      }
+    };
+
     const streamer = new TextStreamer(activeGenerator.tokenizer, {
       callback_function: (text) => {
-        bufferChunk(modelId, requestId, text);
+        emitSegments(reasoningSplitter.push(text));
       },
       skip_prompt: true,
       token_callback_function: (tokens) => {
@@ -323,6 +368,7 @@ async function runGeneration(
       stopping_criteria: StoppingCriteriaList;
     });
 
+    emitSegments(reasoningSplitter.flush());
     flushBufferedText();
     performance.measure(
       `worker-generation:${requestId}`,

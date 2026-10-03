@@ -15,31 +15,17 @@ const COMPACTION_SUMMARIZE_PRESET: ChatGenerationConfig = {
   top_p: 0.85,
 };
 
-type NavigatorWithDeviceMemory = Navigator & {
-  deviceMemory?: number;
+/**
+ * Reasoning models think before they summarize, so the rolling-summary pass
+ * needs room for the think block on top of the summary itself.
+ */
+const REASONING_COMPACTION_SUMMARIZE_PRESET: ChatGenerationConfig = {
+  ...COMPACTION_SUMMARIZE_PRESET,
+  max_new_tokens: 768,
 };
 
-const desktopModel: ChatModelConfig = {
-  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
-  description:
-    "Balanced default for most devices with solid local chat quality.",
-  dtype: "q4",
-  generation: {
-    do_sample: true,
-    max_new_tokens: 192,
-    repetition_penalty: 1.08,
-    return_full_text: false,
-    temperature: 0.72,
-    top_p: 0.92,
-  },
-  historyTurns: 8,
-  id: "lfm2-350m",
-  maxPromptChars: 8500,
-  label: "LFM2 350M",
-  modelId: "onnx-community/LFM2-350M-ONNX",
-  shortLabel: "350M",
-  supportsDesktop: true,
-  supportsMobile: true,
+type NavigatorWithDeviceMemory = Navigator & {
+  deviceMemory?: number;
 };
 
 const desktopModelLfm25: ChatModelConfig = {
@@ -90,7 +76,7 @@ const desktopQualityModel: ChatModelConfig = {
 const desktopExperimentalModel: ChatModelConfig = {
   compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
   description:
-    "Higher-capacity LFM2 for stronger, more detailed desktop answers.",
+    "LFM2.5 1.2B instruct refresh for stronger, more detailed desktop answers.",
   dtype: "q4",
   generation: {
     do_sample: true,
@@ -101,11 +87,11 @@ const desktopExperimentalModel: ChatModelConfig = {
     top_p: 0.9,
   },
   historyTurns: 10,
-  id: "lfm2-1.2b",
+  id: "lfm2-5-1.2b",
   maxPromptChars: 11000,
-  label: "LFM2 1.2B",
-  modelId: "onnx-community/LFM2-1.2B-ONNX",
-  shortLabel: "1.2B",
+  label: "LFM2.5 1.2B",
+  modelId: "LiquidAI/LFM2.5-1.2B-Instruct-ONNX",
+  shortLabel: "2.5 1.2B",
   supportsDesktop: true,
   supportsMobile: false,
 };
@@ -202,17 +188,20 @@ const gemma3_270mModel: ChatModelConfig = {
 };
 
 const qwen3_0_6bModel: ChatModelConfig = {
-  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  compactionSummarize: REASONING_COMPACTION_SUMMARIZE_PRESET,
   description:
-    "Tiny Qwen3 instruct tune with strong multilingual habits in a browser-friendly size.",
+    "Tiny Qwen3 that thinks before answering, with strong multilingual habits in a browser-friendly size.",
   dtype: "q4",
+  // Thinking-mode sampling from the Qwen3 card. Repetition penalty is off:
+  // it pushes reasoning away from reusing the numbers it is working with.
   generation: {
     do_sample: true,
-    max_new_tokens: 176,
-    repetition_penalty: 1.08,
+    max_new_tokens: 1536,
+    repetition_penalty: 1,
     return_full_text: false,
-    temperature: 0.7,
-    top_p: 0.9,
+    temperature: 0.6,
+    top_k: 20,
+    top_p: 0.95,
   },
   historyTurns: 8,
   id: "qwen3-0.6b",
@@ -361,24 +350,26 @@ const bonsaiModel: ChatModelConfig = {
 };
 
 const desktopFlagshipModel: ChatModelConfig = {
-  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  compactionSummarize: REASONING_COMPACTION_SUMMARIZE_PRESET,
   description:
-    "Largest LFM2 option for the richest local answers; best on a capable desktop.",
+    "Largest LFM2.5; always thinks before answering for the richest local replies. Best on a capable desktop.",
   dtype: "q4",
+  // Sampling from the LFM2.5 2.6B card / generation_config.json.
   generation: {
     do_sample: true,
-    max_new_tokens: 256,
-    repetition_penalty: 1.08,
+    max_new_tokens: 1536,
+    repetition_penalty: 1.1,
     return_full_text: false,
-    temperature: 0.66,
-    top_p: 0.9,
+    temperature: 0.1,
+    top_k: 50,
+    top_p: 1,
   },
   historyTurns: 10,
-  id: "lfm2-2.6b",
+  id: "lfm2-5-2.6b",
   maxPromptChars: 11000,
-  label: "LFM2 2.6B",
-  modelId: "onnx-community/LFM2-2.6B-ONNX",
-  shortLabel: "2.6B",
+  label: "LFM2.5 2.6B",
+  modelId: "LiquidAI/LFM2.5-2.6B-ONNX",
+  shortLabel: "2.5 2.6B",
   supportsDesktop: true,
   supportsMobile: false,
 };
@@ -429,23 +420,96 @@ const granite4Nano1bModel: ChatModelConfig = {
   supportsMobile: false,
 };
 
+const lfm25_1_2bThinkingModel: ChatModelConfig = {
+  compactionSummarize: REASONING_COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "LFM2.5 1.2B reasoning tune that thinks step by step before answering on desktop.",
+  dtype: "q4",
+  // Near-greedy sampling recommended on the LFM2.5 Thinking card.
+  generation: {
+    do_sample: true,
+    max_new_tokens: 1536,
+    repetition_penalty: 1.05,
+    return_full_text: false,
+    temperature: 0.05,
+    top_k: 50,
+    top_p: 1,
+  },
+  historyTurns: 10,
+  id: "lfm2-5-1.2b-thinking",
+  maxPromptChars: 11000,
+  label: "LFM2.5 1.2B Thinking",
+  modelId: "LiquidAI/LFM2.5-1.2B-Thinking-ONNX",
+  shortLabel: "2.5 Think",
+  supportsDesktop: true,
+  supportsMobile: false,
+};
+
+const lfm25_230mModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "Smallest LFM2.5 for quick, light chat on modest or mobile hardware.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 160,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.72,
+    top_p: 0.92,
+  },
+  historyTurns: 8,
+  id: "lfm2-5-230m",
+  maxPromptChars: 7500,
+  label: "LFM2.5 230M",
+  modelId: "LiquidAI/LFM2.5-230M-ONNX",
+  shortLabel: "2.5 230M",
+  supportsDesktop: true,
+  supportsMobile: true,
+};
+
+const qwen35_0_8bModel: ChatModelConfig = {
+  compactionSummarize: COMPACTION_SUMMARIZE_PRESET,
+  description:
+    "Text-only Qwen3.5 0.8B build with strong multilingual habits in a browser-friendly size.",
+  dtype: "q4",
+  generation: {
+    do_sample: true,
+    max_new_tokens: 176,
+    repetition_penalty: 1.08,
+    return_full_text: false,
+    temperature: 0.7,
+    top_p: 0.9,
+  },
+  historyTurns: 8,
+  id: "qwen3.5-0.8b",
+  maxPromptChars: 8500,
+  label: "Qwen3.5 0.8B",
+  modelId: "onnx-community/Qwen3.5-0.8B-Text-ONNX",
+  shortLabel: "Qwen3.5",
+  supportsDesktop: true,
+  supportsMobile: true,
+};
+
 export const CHAT_MODELS: Record<ChatModelId, ChatModelConfig> = {
   "smollm2-135m": mobileModel,
   "smollm2-360m": smallQualityModel,
   "gemma-3-270m-it": gemma3_270mModel,
   "qwen2.5-0.5b": compactGeneralModel,
   "qwen3-0.6b": qwen3_0_6bModel,
+  "qwen3.5-0.8b": qwen35_0_8bModel,
   "falcon-h1-tiny-90m-instruct": falconH1TinyModel,
   "falcon-h1-tiny-multilingual-100m-instruct": falconH1TinyMultilingualModel,
+  "lfm2-5-230m": lfm25_230mModel,
   "lfm2-5-350m": desktopModelLfm25,
-  "lfm2-350m": desktopModel,
   "lfm2-700m": desktopQualityModel,
   "llama-3.2-1b-instruct": llama32_1bModel,
   "gemma-3-1b-it": gemma3_1bModel,
-  "lfm2-1.2b": desktopExperimentalModel,
+  "lfm2-5-1.2b": desktopExperimentalModel,
+  "lfm2-5-1.2b-thinking": lfm25_1_2bThinkingModel,
   "tinyswallow-1.5b-instruct": tinySwallowModel,
   "bonsai-1.7b": bonsaiModel,
-  "lfm2-2.6b": desktopFlagshipModel,
+  "lfm2-5-2.6b": desktopFlagshipModel,
   "granite-4.0-350m": granite4Nano350mModel,
   "granite-4.0-1b": granite4Nano1bModel,
 };
@@ -513,9 +577,10 @@ export function getModelProviderGroup(id: ChatModelId): string {
     case "granite-4.0-1b":
     case "granite-4.0-350m":
       return "Granite";
-    case "lfm2-1.2b":
-    case "lfm2-2.6b":
-    case "lfm2-350m":
+    case "lfm2-5-1.2b":
+    case "lfm2-5-1.2b-thinking":
+    case "lfm2-5-2.6b":
+    case "lfm2-5-230m":
     case "lfm2-5-350m":
     case "lfm2-700m":
       return "LFM";
@@ -523,6 +588,7 @@ export function getModelProviderGroup(id: ChatModelId): string {
       return "Llama";
     case "qwen2.5-0.5b":
     case "qwen3-0.6b":
+    case "qwen3.5-0.8b":
       return "Qwen";
     case "smollm2-135m":
     case "smollm2-360m":

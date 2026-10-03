@@ -177,6 +177,7 @@ describe("chat store", () => {
     });
     applyWorkerEvent(store, {
       type: "token",
+      channel: "content",
       modelId,
       requestId: requireRequestId(requestId),
       text: "Local inference keeps data in the browser.",
@@ -198,6 +199,81 @@ describe("chat store", () => {
     expect(assistant?.finishReason).toBe("completed");
   });
 
+  it("keeps reasoning separate from the answer and times the think phase", () => {
+    vi.useFakeTimers();
+    try {
+      const runtime = createRuntimeStub();
+      const store = createChatStore(runtime);
+
+      store.getState().sendMessage("What is 17 * 23?");
+      const requestId = requireRequestId(store.getState().activeRequestId);
+      const modelId = store.getState().selectedModelId;
+
+      vi.setSystemTime(1_000);
+      applyWorkerEvent(store, {
+        type: "token",
+        channel: "reasoning",
+        modelId,
+        requestId,
+        text: "17 * 20 = 340, plus 51.",
+      });
+      expect(store.getState().messages.at(-1)?.content).toBe("");
+
+      vi.setSystemTime(4_500);
+      applyWorkerEvent(store, {
+        type: "token",
+        channel: "content",
+        modelId,
+        requestId,
+        text: "391",
+      });
+      applyWorkerEvent(store, {
+        type: "complete",
+        generatedTokens: 20,
+        modelId,
+        requestId,
+        finishReason: "completed",
+      });
+
+      const assistant = store.getState().messages.at(-1);
+      expect(assistant?.reasoning).toBe("17 * 20 = 340, plus 51.");
+      expect(assistant?.content).toBe("391");
+      expect(assistant?.reasoningDurationMs).toBe(3_500);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a turn stopped mid-thought so its reasoning stays visible", () => {
+    const runtime = createRuntimeStub();
+    const store = createChatStore(runtime);
+
+    store.getState().sendMessage("Think hard.");
+    const requestId = requireRequestId(store.getState().activeRequestId);
+    const modelId = store.getState().selectedModelId;
+
+    applyWorkerEvent(store, {
+      type: "token",
+      channel: "reasoning",
+      modelId,
+      requestId,
+      text: "Considering options",
+    });
+    applyWorkerEvent(store, {
+      type: "complete",
+      generatedTokens: 3,
+      modelId,
+      requestId,
+      finishReason: "stopped",
+    });
+
+    const assistant = store.getState().messages.at(-1);
+    expect(assistant?.role).toBe("assistant");
+    expect(assistant?.reasoning).toBe("Considering options");
+    expect(assistant?.content).toBe("");
+    expect(assistant?.reasoningDurationMs).toBeTypeOf("number");
+  });
+
   it("marks responses that stop at the token limit and continues the same assistant turn", async () => {
     const runtime = createRuntimeStub();
     const store = createChatStore(runtime);
@@ -208,6 +284,7 @@ describe("chat store", () => {
 
     applyWorkerEvent(store, {
       type: "token",
+      channel: "content",
       modelId,
       requestId: requireRequestId(requestId),
       text: "This answer is still going",
@@ -257,6 +334,7 @@ describe("chat store", () => {
     const previousModelId = store.getState().selectedModelId;
     applyWorkerEvent(store, {
       type: "token",
+      channel: "content",
       modelId: previousModelId,
       requestId: requireRequestId(requestId),
       text: "Think different.",
@@ -289,6 +367,7 @@ describe("chat store", () => {
 
     applyWorkerEvent(store, {
       type: "token",
+      channel: "content",
       modelId: oldModelId,
       requestId: requireRequestId(requestId),
       text: "Partial reply",
@@ -319,17 +398,19 @@ describe("chat store", () => {
       "gemma-3-270m-it",
       "qwen2.5-0.5b",
       "qwen3-0.6b",
+      "qwen3.5-0.8b",
       "falcon-h1-tiny-90m-instruct",
       "falcon-h1-tiny-multilingual-100m-instruct",
+      "lfm2-5-230m",
       "lfm2-5-350m",
-      "lfm2-350m",
       "lfm2-700m",
       "llama-3.2-1b-instruct",
       "gemma-3-1b-it",
-      "lfm2-1.2b",
+      "lfm2-5-1.2b",
+      "lfm2-5-1.2b-thinking",
       "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
-      "lfm2-2.6b",
+      "lfm2-5-2.6b",
       "granite-4.0-350m",
       "granite-4.0-1b",
     ]);
@@ -342,10 +423,11 @@ describe("chat store", () => {
       "lfm2-700m",
       "llama-3.2-1b-instruct",
       "gemma-3-1b-it",
-      "lfm2-1.2b",
+      "lfm2-5-1.2b",
+      "lfm2-5-1.2b-thinking",
       "tinyswallow-1.5b-instruct",
       "bonsai-1.7b",
-      "lfm2-2.6b",
+      "lfm2-5-2.6b",
       "granite-4.0-1b",
     ] as const) {
       expect(
@@ -353,9 +435,9 @@ describe("chat store", () => {
           ?.disabled,
       ).toBe(true);
     }
-    store.getState().setSelectedModel("lfm2-350m");
+    store.getState().setSelectedModel("lfm2-5-230m");
 
-    expect(store.getState().selectedModelId).toBe("lfm2-350m");
+    expect(store.getState().selectedModelId).toBe("lfm2-5-230m");
     expect(runtime.recreateWorker).toHaveBeenCalledTimes(1);
   });
 
@@ -372,17 +454,19 @@ describe("chat store", () => {
       "Gemma 3 270M",
       "Qwen2.5 0.5B",
       "Qwen3 0.6B",
+      "Qwen3.5 0.8B",
       "Falcon H1 Tiny 90M",
       "Falcon H1 Tiny Multilingual 100M",
+      "LFM2.5 230M",
       "LFM2.5 350M",
-      "LFM2 350M",
       "LFM2 700M",
       "Llama 3.2 1B",
       "Gemma 3 1B",
-      "LFM2 1.2B",
+      "LFM2.5 1.2B",
+      "LFM2.5 1.2B Thinking",
       "TinySwallow 1.5B",
       "Bonsai 1.7B",
-      "LFM2 2.6B",
+      "LFM2.5 2.6B",
       "Granite 4.0 350M",
       "Granite 4.0 1B",
     ]);
@@ -503,6 +587,7 @@ describe("chat store", () => {
 
     applyWorkerEvent(store, {
       type: "token",
+      channel: "content",
       modelId: "smollm2-135m",
       requestId: requireRequestId(requestId),
       text: "stale",
@@ -625,6 +710,7 @@ describe("chat store", () => {
     for (const listener of [...runtime.listeners]) {
       listener({
         type: "token",
+        channel: "content",
         modelId: "lfm2-5-350m",
         requestId: compactionRequestId,
         text: "- partial",
@@ -667,6 +753,7 @@ describe("chat store", () => {
     // Tokens/complete the worker posted before it processed the reset.
     applyWorkerEvent(store, {
       type: "token",
+      channel: "content",
       modelId,
       requestId,
       text: "stale",

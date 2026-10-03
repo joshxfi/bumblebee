@@ -1,9 +1,4 @@
-import {
-  CircleNotchIcon,
-  PaperPlaneTiltIcon,
-  StopIcon,
-} from "@phosphor-icons/react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react";
 import {
   useEffect,
   useMemo,
@@ -18,8 +13,17 @@ import { ChatMessageBubble } from "@/components/chat/chat-message-bubble";
 import { ChatPerfOverlay } from "@/components/chat/chat-perf-overlay";
 import { ChatPrepareModel } from "@/components/chat/chat-prepare-model";
 import { copyToClipboard, isSubmitEnter } from "@/components/chat/chat-ui";
-import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom-button";
 import { Button } from "@/components/ui/button";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes, getModelConfig } from "@/lib/chat-config";
 import { getLatestChatPerfSample, subscribeChatPerf } from "@/lib/chat-runtime";
@@ -30,10 +34,6 @@ import {
   getContextWindowStats,
 } from "@/lib/context-compaction";
 
-/** Switch the message list to windowed rendering past this many messages. */
-const VIRTUALIZE_THRESHOLD = 80;
-/** Treated as "scrolled to the bottom" within this many pixels of the end. */
-const NEAR_BOTTOM_PX = 56;
 /** How long the inline "Copied"/"Copy failed" hint stays visible. */
 const COPY_FEEDBACK_MS = 1800;
 
@@ -65,19 +65,11 @@ export function ChatApp() {
   const rollingContextSummary = useChatStore(
     (state) => state.rollingContextSummary,
   );
-  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
-  const isNearBottomRef = useRef(true);
   const copyFeedbackTimeoutRef = useRef<number | null>(null);
-  const previousMessageCountRef = useRef(0);
-  const previousLastMessageIdRef = useRef<string | null>(null);
-  const previousLastMessageLengthRef = useRef(0);
-  const previousLastMessageStateRef = useRef<ChatMessage["state"] | null>(null);
   const [copiedMessageState, setCopiedMessageState] = useState<{
     messageId: string;
     status: "copied" | "error";
   } | null>(null);
-  const [isNearBottom, setIsNearBottom] = useState(true);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const perfSample = useSyncExternalStore(
     subscribeChatPerf,
     getLatestChatPerfSample,
@@ -92,18 +84,12 @@ export function ChatApp() {
     messages.some((message) => message.role === "user") &&
     messages.at(-1)?.role !== "user";
   const canSend = composer.trim().length > 0 && !busy;
-  const shouldShowScrollToBottom = showScrollToBottom && !isNearBottom;
   const continuableMessageId =
     messages.at(-1)?.role === "assistant" &&
     messages.at(-1)?.finishReason === "length"
       ? (messages.at(-1)?.id ?? null)
       : null;
   const showPrepareModel = !hasLoadedModel;
-  const shouldVirtualize = messages.length > VIRTUALIZE_THRESHOLD;
-  const virtualRowCount =
-    shouldVirtualize && isCompactingContext
-      ? messages.length + 1
-      : messages.length;
   const contextWindowLabel = useMemo(() => {
     if (messages.length === 0) {
       return null;
@@ -137,26 +123,14 @@ export function ChatApp() {
         return loaded && total ? `${loaded} / ${total}` : null;
       })();
 
+  // The composer is a fixed overlay, so the list pads its end to clear it and
+  // the jump-to-latest button floats just above it.
+  const composerClearanceClassName = showPrepareModel
+    ? "pb-[calc(13.5rem+env(safe-area-inset-bottom))]"
+    : "pb-[calc(10.5rem+env(safe-area-inset-bottom))]";
   const scrollButtonOffsetClassName = showPrepareModel
-    ? "bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
-    : "bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]";
-
-  const rowVirtualizer = useVirtualizer({
-    count: shouldVirtualize ? virtualRowCount : 0,
-    estimateSize: (index) => {
-      if (isCompactingContext && index === messages.length) {
-        return 56;
-      }
-      return 156;
-    },
-    gap: 12,
-    getItemKey: (index) => messages[index]?.id ?? "__compaction_strip",
-    getScrollElement: () => scrollViewportRef.current,
-    overscan: 6,
-    paddingEnd: 40,
-    paddingStart: 16,
-  });
-  const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : [];
+    ? "data-[direction=end]:bottom-[calc(10rem+env(safe-area-inset-bottom))] sm:data-[direction=end]:bottom-[calc(9rem+env(safe-area-inset-bottom))]"
+    : "data-[direction=end]:bottom-[calc(6.75rem+env(safe-area-inset-bottom))] sm:data-[direction=end]:bottom-[calc(6.25rem+env(safe-area-inset-bottom))]";
 
   useEffect(() => {
     return () => {
@@ -165,109 +139,6 @@ export function ChatApp() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    const viewport = scrollViewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    const updateScrollState = () => {
-      const distanceFromBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const nextIsNearBottom = distanceFromBottom < NEAR_BOTTOM_PX;
-
-      isNearBottomRef.current = nextIsNearBottom;
-      setIsNearBottom(nextIsNearBottom);
-      setShowScrollToBottom(messages.length > 0 && !nextIsNearBottom);
-    };
-
-    // Coalesce rapid scroll events to one layout read per frame.
-    let frame: number | null = null;
-    const onScroll = () => {
-      if (frame !== null) {
-        return;
-      }
-      frame = window.requestAnimationFrame(() => {
-        frame = null;
-        updateScrollState();
-      });
-    };
-
-    // Only user scrolling may unpin the view; re-measuring here would see the
-    // freshly added bubbles before auto-scroll runs and wrongly unpin.
-    if (messages.length === 0) {
-      isNearBottomRef.current = true;
-      setIsNearBottom(true);
-      setShowScrollToBottom(false);
-    }
-    viewport.addEventListener("scroll", onScroll, { passive: true });
-
-    return () => {
-      if (frame !== null) {
-        window.cancelAnimationFrame(frame);
-      }
-      viewport.removeEventListener("scroll", onScroll);
-    };
-  }, [messages.length]);
-
-  useEffect(() => {
-    const viewport = scrollViewportRef.current;
-    const lastMessage = messages.at(-1);
-
-    if (!viewport) {
-      return;
-    }
-
-    const isNewMessage =
-      previousMessageCountRef.current !== messages.length ||
-      previousLastMessageIdRef.current !== (lastMessage?.id ?? null);
-    const lastMessageLength = lastMessage?.content.length ?? 0;
-    const isStreamingUpdate =
-      previousLastMessageLengthRef.current !== lastMessageLength;
-    // A finished reply re-renders as Markdown, changing height without
-    // changing length.
-    const isStateChange =
-      previousLastMessageStateRef.current !== (lastMessage?.state ?? null);
-
-    const rafId = window.requestAnimationFrame(() => {
-      if (
-        isNearBottomRef.current &&
-        (isNewMessage ||
-          isStreamingUpdate ||
-          isStateChange ||
-          isCompactingContext)
-      ) {
-        // Instant: a smooth scroll's intermediate scroll events would read as
-        // "user scrolled away" and unpin the view.
-        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
-      }
-
-      previousMessageCountRef.current = messages.length;
-      previousLastMessageIdRef.current = lastMessage?.id ?? null;
-      previousLastMessageLengthRef.current = lastMessageLength;
-      previousLastMessageStateRef.current = lastMessage?.state ?? null;
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [isCompactingContext, messages]);
-
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const viewport = scrollViewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    isNearBottomRef.current = true;
-    setIsNearBottom(true);
-    setShowScrollToBottom(false);
-    viewport.scrollTo({
-      top: viewport.scrollHeight,
-      behavior,
-    });
-  };
 
   const handleCopyMessage = async (message: ChatMessage) => {
     if (message.content.trim().length === 0) {
@@ -307,119 +178,62 @@ export function ChatApp() {
         selectedModelLabel={selectedModel.label}
       />
 
-      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pt-16 sm:px-4">
-        <div
-          ref={scrollViewportRef}
-          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${
-            showPrepareModel
-              ? "pb-[calc(13.5rem+env(safe-area-inset-bottom))]"
-              : "pb-[calc(10.5rem+env(safe-area-inset-bottom))]"
-          }`}
-        >
-          {messages.length === 0 ? (
+      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col pt-16">
+        {messages.length === 0 ? (
+          <div
+            className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 sm:px-4 ${composerClearanceClassName}`}
+          >
             <ChatEmptyState
               busy={busy}
               currentModelLabel={selectedModel.label}
               onPrompt={sendMessage}
             />
-          ) : shouldVirtualize ? (
-            <div
-              className="relative"
-              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-            >
-              {virtualRows.map((virtualRow) => {
-                const isCompactionStrip =
-                  isCompactingContext && virtualRow.index === messages.length;
-
-                if (isCompactionStrip) {
-                  return (
-                    <div
-                      data-index={virtualRow.index}
-                      key="__compaction_strip"
-                      ref={(node) => {
-                        if (node) {
-                          rowVirtualizer.measureElement(node);
-                        }
-                      }}
-                      className="absolute top-0 left-0 w-full"
-                      style={{
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
+          </div>
+        ) : (
+          <MessageScrollerProvider autoScroll>
+            <MessageScroller className="flex-1">
+              <MessageScrollerViewport aria-label="Conversation">
+                <MessageScrollerContent
+                  className={`gap-5 px-3 pt-4 sm:px-4 ${composerClearanceClassName}`}
+                >
+                  {messages.map((message) => (
+                    <MessageScrollerItem
+                      key={message.id}
+                      messageId={message.id}
+                      scrollAnchor={message.role === "user"}
                     >
-                      <ContextCompactionStrip />
-                    </div>
-                  );
-                }
-
-                const message = messages[virtualRow.index];
-                if (!message) {
-                  return null;
-                }
-
-                return (
-                  <div
-                    data-index={virtualRow.index}
-                    key={message.id}
-                    ref={(node) => {
-                      if (node) {
-                        rowVirtualizer.measureElement(node);
-                      }
-                    }}
-                    className="absolute top-0 left-0 w-full"
-                    style={{
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    <ChatMessageBubble
-                      canContinue={
-                        !busy &&
-                        continuableMessageId === message.id &&
-                        message.content.trim().length > 0
-                      }
-                      copyState={
-                        copiedMessageState?.messageId === message.id
-                          ? copiedMessageState.status
-                          : null
-                      }
-                      message={message}
-                      onContinue={continueLastResponse}
-                      onCopy={handleCopyMessage}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 pt-4 pb-10 sm:pb-12">
-              {messages.map((message) => (
-                <ChatMessageBubble
-                  canContinue={
-                    !busy &&
-                    continuableMessageId === message.id &&
-                    message.content.trim().length > 0
-                  }
-                  key={message.id}
-                  copyState={
-                    copiedMessageState?.messageId === message.id
-                      ? copiedMessageState.status
-                      : null
-                  }
-                  message={message}
-                  onContinue={continueLastResponse}
-                  onCopy={handleCopyMessage}
-                />
-              ))}
-              {isCompactingContext ? <ContextCompactionStrip /> : null}
-            </div>
-          )}
-        </div>
+                      <ChatMessageBubble
+                        canContinue={
+                          !busy &&
+                          continuableMessageId === message.id &&
+                          message.content.trim().length > 0
+                        }
+                        copyState={
+                          copiedMessageState?.messageId === message.id
+                            ? copiedMessageState.status
+                            : null
+                        }
+                        message={message}
+                        onContinue={continueLastResponse}
+                        onCopy={handleCopyMessage}
+                      />
+                    </MessageScrollerItem>
+                  ))}
+                  {isCompactingContext ? (
+                    <MessageScrollerItem messageId="context-compaction">
+                      <ContextCompactionMarker />
+                    </MessageScrollerItem>
+                  ) : null}
+                </MessageScrollerContent>
+              </MessageScrollerViewport>
+              <MessageScrollerButton
+                aria-label="Scroll to latest messages"
+                className={`z-20 border shadow-[0_8px_24px_rgba(0,0,0,0.22)] ${scrollButtonOffsetClassName}`}
+              />
+            </MessageScroller>
+          </MessageScrollerProvider>
+        )}
       </main>
-
-      <ScrollToBottomButton
-        offsetClassName={scrollButtonOffsetClassName}
-        visible={shouldShowScrollToBottom}
-        onScrollToBottom={() => scrollToBottom()}
-      />
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
@@ -502,18 +316,16 @@ export function ChatApp() {
   );
 }
 
-function ContextCompactionStrip() {
+function ContextCompactionMarker() {
   return (
-    <div
-      className="flex items-center gap-2 text-sm text-muted-foreground"
-      role="status"
-    >
-      <CircleNotchIcon
-        aria-hidden
-        className="size-4 shrink-0 animate-spin text-muted-foreground"
-      />
-      <span>Updating conversation context…</span>
-    </div>
+    <Marker role="status" variant="separator">
+      <MarkerIcon>
+        <Spinner className="size-3.5" />
+      </MarkerIcon>
+      <MarkerContent className="shimmer">
+        Updating conversation context…
+      </MarkerContent>
+    </Marker>
   );
 }
 
