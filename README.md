@@ -97,7 +97,8 @@ All checkpoints below are **q4** ONNX builds from the [`onnx-community`](https:/
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/)
+- [Bun](https://bun.sh/) 1.4.2+ (pinned via `packageManager`)
+- [Node.js](https://nodejs.org/) 24+ (see `.nvmrc`; Vite and Vitest run under Node)
 
 ### Setup
 

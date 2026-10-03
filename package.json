@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "node": ">=24"
+  },
   "author": "@joshxfi (https://github.com/joshxfi)",
   "repository": {
     "type": "git",
